@@ -47,7 +47,7 @@ const LandingPage = () => {
         <div className="mx-auto w-24 h-24 rounded-3xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-2xl animate-pulse">
 
           <span className="text-white text-5xl font-black">
-            M
+            V
           </span>
 
         </div>
@@ -57,11 +57,11 @@ const LandingPage = () => {
         <h1 className="mt-8 text-6xl font-extrabold tracking-tight">
 
           <span className="text-slate-800">
-            Mind
+            Vita
           </span>
 
           <span className="text-blue-600">
-            Pulse
+            Sense
           </span>
 
         </h1>

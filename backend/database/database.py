@@ -5,7 +5,7 @@ from backend.config import Config
 
 # Create database engine
 engine = create_engine(Config.DATABASE_URL)
-
+print(Config.DATABASE_URL) 
 # Create session factory
 SessionLocal = sessionmaker(
     autocommit=False,

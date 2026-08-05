@@ -1,12 +1,32 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { FaEye, FaEyeSlash } from "react-icons/fa";
+import api from "../../api/axios";
 
 const Login = () => {
+  const navigate = useNavigate();
+
+  const [showPassword, setShowPassword] =useState(false);
+
   const [formData, setFormData] = useState({
     email: "",
     password: "",
     rememberMe: false,
   });
+
+  // Load remembered email
+
+  useEffect(() => {
+    const rememberedEmail = localStorage.getItem("rememberEmail");
+
+    if (rememberedEmail) {
+      setFormData({
+        email: rememberedEmail,
+        password: "",
+        rememberMe: true,
+      });
+    }
+  }, []);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -17,12 +37,47 @@ const Login = () => {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
-    console.log(formData);
+    try {
+      const response = await api.post("/login", {
+        email: formData.email,
+        password: formData.password,
+      });
 
-    // axios.post("/login", formData);
+      if (response.data.success) {
+
+        // Remember Email
+
+        if (formData.rememberMe) {
+          localStorage.setItem("rememberEmail", formData.email);
+        } else {
+          localStorage.removeItem("rememberEmail");
+        }
+
+        // Store logged in user
+
+        localStorage.setItem("user_id", response.data.user_id);
+        localStorage.setItem("name", response.data.name);
+
+        alert(response.data.message);
+
+        navigate("/dashboard");
+
+      } else {
+        alert(response.data.message);
+      }
+
+    } catch (error) {
+
+      if (error.response) {
+        alert(error.response.data.message);
+      } else {
+        alert("Unable to connect to server.");
+      }
+
+    }
   };
 
   const inputStyle =
@@ -39,15 +94,15 @@ const Login = () => {
 
           <div className="inline-flex items-center gap-3">
 
-            <div className="w-18 h-18 rounded-xl bg-blue-600 text-white flex items-center justify-center text-6xl font-bold shadow-md">
-              M
+            <div className="w-16 h-16 rounded-xl bg-blue-600 text-white flex items-center justify-center text-4xl font-bold shadow-md">
+              V
             </div>
 
             <div className="text-left">
 
               <h1 className="text-5xl font-bold tracking-tight">
-                <span className="text-slate-800">Mind</span>
-                <span className="text-blue-600">Pulse</span>
+                <span className="text-slate-800">Vita</span>
+                <span className="text-blue-600">Sense</span>
               </h1>
 
               <p className="text-sm text-slate-500">
@@ -64,7 +119,7 @@ const Login = () => {
 
         <div className="bg-white rounded-xl shadow-md p-8">
 
-          <h2 className="text-4xl font-bold text-slate-800 text-center">
+          <h2 className="text-3xl font-bold text-slate-800 text-center">
             Welcome Back
           </h2>
 
@@ -102,15 +157,31 @@ const Login = () => {
                 Password
               </label>
 
-              <input
-                type="password"
-                name="password"
-                required
-                value={formData.password}
-                onChange={handleChange}
-                placeholder="Enter your password"
-                className={inputStyle}
-              />
+              <div className="relative">
+
+                <input
+                  type={showPassword ? "text" : "password"}
+                  name="password"
+                  required
+                  value={formData.password}
+                  onChange={handleChange}
+                  placeholder="Enter your password"
+                  className={`${inputStyle} pr-12`}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-blue-600"
+                >
+                  {showPassword ? (
+                    <FaEyeSlash size={18} />
+                  ) : (
+                    <FaEye size={18} />
+                  )}
+                </button>
+
+              </div>
 
             </div>
 

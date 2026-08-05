@@ -2,15 +2,17 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import StepOne from "./StepOne";
 import StepTwo from "./StepTwo";
+import api from "../../../api/axios";
+import { useNavigate } from "react-router-dom";
 
 const Register = () => {
+  const navigate = useNavigate();
   const [step, setStep] = useState(1);
 
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     mobile_number: "",
-    age: "",
     date_of_birth: "",
     address: "",
     designation: "Student",
@@ -26,27 +28,46 @@ const Register = () => {
   };
 
   const nextStep = () => {
-    if (
-      !formData.name ||
-      !formData.email ||
-      !formData.mobile_number ||
-      !formData.date_of_birth
-    ) {
-      alert("Please fill all required fields.");
-      return;
-    }
+  if (
+    !formData.name ||
+    !formData.email ||
+    !formData.mobile_number ||
+    !formData.date_of_birth
+  ) {
+    alert("Please fill all required fields.");
+    return;
+  }
 
-    setStep(2);
-  };
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  if (!emailRegex.test(formData.email)) {
+    alert("Please enter a valid email.");
+    return;
+  }
+
+  const mobileRegex = /^[0-9]{10}$/;
+
+  if (!mobileRegex.test(formData.mobile_number)) {
+    alert("Mobile number must contain exactly 10 digits.");
+    return;
+  }
+
+  setStep(2);
+};
 
   const prevStep = () => {
     setStep(1);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
+    // Required fields
     if (
+      !formData.name ||
+      !formData.email ||
+      !formData.mobile_number ||
+      !formData.date_of_birth ||
       !formData.address ||
       !formData.password ||
       !formData.confirmPassword
@@ -55,14 +76,68 @@ const Register = () => {
       return;
     }
 
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(formData.email)) {
+      alert("Please enter a valid email address.");
+      return;
+    }
+
+    // Mobile validation (10 digits)
+    const mobileRegex = /^[0-9]{10}$/;
+
+    if (!mobileRegex.test(formData.mobile_number)) {
+      alert("Please enter a valid 10-digit mobile number.");
+      return;
+    }
+
+    // Password strength validation
+    const passwordRegex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&.#])[A-Za-z\d@$!%*?&.#]{8,}$/;
+
+    if (!passwordRegex.test(formData.password)) {
+      alert(
+        "Password must contain:\n\n" +
+        "• At least 8 characters\n" +
+        "• One uppercase letter\n" +
+        "• One lowercase letter\n" +
+        "• One number\n" +
+        "• One special character"
+      );
+      return;
+    }
+
+    // Password match
     if (formData.password !== formData.confirmPassword) {
       alert("Passwords do not match.");
       return;
     }
 
-    console.log(formData);
+    try {
+      const response = await api.post("/register", {
+        name: formData.name,
+        email: formData.email,
+        mobile_number: formData.mobile_number,
+        date_of_birth: formData.date_of_birth,
+        address: formData.address,
+        designation: formData.designation,
+        password: formData.password,
+      });
 
-    // axios.post("/register", formData)
+      if (response.data.success) {
+        alert(response.data.message);
+        navigate("/login");
+      } else {
+        alert(response.data.message);
+      }
+    } catch (error) {
+      if (error.response) {
+        alert(error.response.data.message);
+      } else {
+        alert("Unable to connect to server.");
+      }
+    }
   };
 
   return (
@@ -79,14 +154,14 @@ const Register = () => {
             <div className="inline-flex items-center gap-3">
 
               <div className="w-18 h-18 rounded-xl bg-blue-600 text-white flex items-center justify-center text-6xl font-bold shadow-md">
-                M
+                V
               </div>
 
               <div className="text-left">
 
                 <h1 className="text-5xl font-bold tracking-tight">
-                  <span className="text-slate-800">Mind</span>
-                  <span className="text-blue-600">Pulse</span>
+                  <span className="text-slate-800">Vita</span>
+                  <span className="text-blue-600">Sense</span>
                 </h1>
 
                 <p className="text-sm text-slate-500">
@@ -113,8 +188,8 @@ const Register = () => {
 
             <div
               className={`px-5 py-2 rounded-full text-sm font-semibold transition ${step === 1
-                  ? "bg-blue-600 text-white"
-                  : "bg-white border text-slate-600"
+                ? "bg-blue-600 text-white"
+                : "bg-white border text-slate-600"
                 }`}
             >
               Personal Information
@@ -124,8 +199,8 @@ const Register = () => {
 
             <div
               className={`px-5 py-2 rounded-full text-sm font-semibold transition ${step === 2
-                  ? "bg-blue-600 text-white"
-                  : "bg-white border text-slate-600"
+                ? "bg-blue-600 text-white"
+                : "bg-white border text-slate-600"
                 }`}
             >
               Account Setup

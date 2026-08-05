@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-
+from datetime import datetime
 from backend.database.models.users import User
 from backend.auth.password_utils import hash_password, verify_password
 
@@ -35,7 +35,10 @@ def register_user(db: Session, user_data: dict):
         name=user_data["name"],
         email=user_data["email"],
         mobile_number=user_data["mobile_number"],
-        date_of_birth=user_data["date_of_birth"],
+        date_of_birth=datetime.strptime(
+    user_data["date_of_birth"],
+    "%Y-%m-%d"
+).date(),
         address=user_data["address"],
         designation=user_data["designation"],
         password_hash=hashed_password

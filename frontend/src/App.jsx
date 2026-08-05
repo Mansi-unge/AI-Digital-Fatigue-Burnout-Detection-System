@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import LandingPage from "./pages/LandingPage/LandingPage";
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register/Register";
+import Dashboard from "./pages/dashboard/Dashboard";
 
 function App() {
   return (
@@ -14,7 +15,7 @@ function App() {
         {/* Authentication */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-
+        <Route path="/dashboard" element={<Dashboard />} />
         {/* 404 */}
         <Route
           path="*"
