@@ -118,12 +118,11 @@ const LandingPage = () => {
             </div>
           </>
         ) : (
-          <div className="mt-12">
+          <div className="mt-6">
 
-            <div className="text-green-800 text-xl font-semibold mb-8">
-              ✓ Application Ready
-            </div>
-
+            <p className="text-green-700 font-bold text-2xl mb-8">
+              Welcome to the future of digital wellness.
+            </p>
             <Link
               to="/login"
               className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-10 py-4 rounded-xl text-lg font-semibold shadow-xl hover:shadow-2xl transition duration-300"

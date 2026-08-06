@@ -8,7 +8,10 @@ import { useNavigate } from "react-router-dom";
 const Register = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
-
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -21,39 +24,133 @@ const Register = () => {
   });
 
   const handleChange = (e) => {
+    const { name, value } = e.target;
+
     setFormData((prev) => ({
       ...prev,
-      [e.target.name]: e.target.value,
+      [name]: value,
     }));
+
+    // Reset OTP state if email changes
+    if (name === "email") {
+      setOtp("");
+      setOtpSent(false);
+      setEmailVerified(false);
+    }
   };
+  const sendOtp = async () => {
 
+   if (!formData.email) {
+  alert("Please enter your email.");
+  return;
+}
+
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+if (!emailRegex.test(formData.email)) {
+  alert("Please enter a valid email.");
+  return;
+}
+
+    try {
+
+      setLoading(true);
+
+      const response = await api.post("/send-otp", {
+        email: formData.email,
+      });
+
+      if (response.data.success) {
+
+        alert(response.data.message);
+        setOtpSent(true);
+
+      } else {
+
+        alert(response.data.message);
+
+      }
+
+    } catch (error) {
+
+      alert(error.response?.data?.message || "Unable to send OTP.");
+
+    } finally {
+
+      setLoading(false);
+
+    }
+
+  };
+  const verifyOtp = async () => {
+
+    if (!otp) {
+      alert("Enter OTP.");
+      return;
+    }
+
+    try {
+
+      setLoading(true);
+
+      const response = await api.post("/verify-otp", {
+        email: formData.email,
+        otp: otp,
+      });
+
+      if (response.data.success) {
+
+        alert(response.data.message);
+
+        setEmailVerified(true);
+
+      } else {
+
+        alert(response.data.message);
+
+      }
+
+    } catch (error) {
+
+      alert(error.response?.data?.message || "Verification failed.");
+
+    } finally {
+
+      setLoading(false);
+
+    }
+
+  };
   const nextStep = () => {
-  if (
-    !formData.name ||
-    !formData.email ||
-    !formData.mobile_number ||
-    !formData.date_of_birth
-  ) {
-    alert("Please fill all required fields.");
-    return;
-  }
+    if (
+      !formData.name ||
+      !formData.email ||
+      !formData.mobile_number ||
+      !formData.date_of_birth
+    ) {
+      alert("Please fill all required fields.");
+      return;
+    }
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-  if (!emailRegex.test(formData.email)) {
-    alert("Please enter a valid email.");
-    return;
-  }
+    if (!emailRegex.test(formData.email)) {
+      alert("Please enter a valid email.");
+      return;
+    }
 
-  const mobileRegex = /^[0-9]{10}$/;
+    const mobileRegex = /^[0-9]{10}$/;
 
-  if (!mobileRegex.test(formData.mobile_number)) {
-    alert("Mobile number must contain exactly 10 digits.");
-    return;
-  }
-
-  setStep(2);
-};
+    if (!mobileRegex.test(formData.mobile_number)) {
+      alert("Mobile number must contain exactly 10 digits.");
+      return;
+    }
+    if (!emailVerified) {
+      alert("Please verify your email first.");
+      return;
+    }
+    setStep(2);
+  };
 
   const prevStep = () => {
     setStep(1);
@@ -114,6 +211,10 @@ const Register = () => {
       return;
     }
 
+    if (!emailVerified) {
+      alert("Please verify your email first.");
+      return;
+    }
     try {
       const response = await api.post("/register", {
         name: formData.name,
@@ -128,6 +229,9 @@ const Register = () => {
       if (response.data.success) {
         alert(response.data.message);
         navigate("/login");
+        setOtp("");
+        setOtpSent(false);
+        setEmailVerified(false);  
       } else {
         alert(response.data.message);
       }
@@ -222,6 +326,17 @@ const Register = () => {
               formData={formData}
               handleChange={handleChange}
               nextStep={nextStep}
+
+              otp={otp}
+              setOtp={setOtp}
+
+              otpSent={otpSent}
+              emailVerified={emailVerified}
+
+              sendOtp={sendOtp}
+              verifyOtp={verifyOtp}
+
+              loading={loading}
             />
           )}
 
