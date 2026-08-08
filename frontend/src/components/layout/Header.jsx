@@ -19,10 +19,10 @@ const Header = () => {
   }, []);
 
   return (
-    <header className="ml-[260px] h-20 bg-slate-900 border-b border-slate-700 flex items-center justify-between px-8">
+    <header className="w-full h-[88px] flex items-center justify-between px-8 bg-slate-950 border-b border-slate-800">
 
       {/* Left Section */}
-      <div>
+      <div className="shrink-0">
         <h1 className="text-2xl font-bold text-white">
           Dashboard
         </h1>
@@ -33,7 +33,7 @@ const Header = () => {
       </div>
 
       {/* Middle Section */}
-      <div className="hidden md:flex items-center bg-slate-800 rounded-xl px-4 py-2 w-[360px] border border-slate-700">
+      <div className="hidden md:flex items-center bg-slate-800 rounded-xl px-4 py-2 w-[320px] border border-slate-700">
 
         <Search
           size={18}
@@ -49,7 +49,7 @@ const Header = () => {
       </div>
 
       {/* Right Section */}
-      <div className="flex items-center gap-5">
+      <div className="flex items-center gap-4">
 
         {/* Monitoring Status */}
         <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/30 px-4 py-2 rounded-xl">
@@ -82,7 +82,7 @@ const Header = () => {
 
           <Clock3 size={18} />
 
-          <span className="text-sm">
+          <span className="text-sm whitespace-nowrap">
             {currentTime.toLocaleTimeString()}
           </span>
 

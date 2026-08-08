@@ -26,10 +26,10 @@ const COLORS = [
 
 const ApplicationPieChart = () => {
   return (
-    <div className="bg-slate-900 rounded-2xl border border-slate-800 p-6 h-[420px] shadow-lg">
+    <div className="bg-slate-900 rounded-2xl border border-slate-800 p-6 h-full">
 
       {/* Heading */}
-      <div className="mb-6">
+      <div className="mb-4">
         <h2 className="text-xl font-bold text-white">
           Application Usage
         </h2>
@@ -40,34 +40,37 @@ const ApplicationPieChart = () => {
       </div>
 
       {/* Pie Chart */}
-      <ResponsiveContainer width="100%" height="75%">
-        <PieChart>
+      <div className="w-full h-[300px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
 
-          <Pie
-            data={data}
-            dataKey="value"
-            nameKey="name"
-            innerRadius={65}
-            outerRadius={100}
-            paddingAngle={4}
-          >
-            {data.map((entry, index) => (
-              <Cell
-                key={index}
-                fill={COLORS[index % COLORS.length]}
-              />
-            ))}
-          </Pie>
+            <Pie
+              data={data}
+              dataKey="value"
+              nameKey="name"
+              innerRadius={65}
+              outerRadius={100}
+              paddingAngle={4}
+            >
+              {data.map((entry, index) => (
+                <Cell
+                  key={index}
+                  fill={COLORS[index % COLORS.length]}
+                />
+              ))}
+            </Pie>
 
-          <Tooltip />
+            <Tooltip />
 
-          <Legend />
+            <Legend />
 
-        </PieChart>
-      </ResponsiveContainer>
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
 
       {/* Summary */}
-      <div className="mt-4 border-t border-slate-800 pt-4">
+      <div className="mt-3 border-t border-slate-800 pt-3">
+
         <p className="text-sm text-slate-400">
           Most used application today:
         </p>
@@ -75,6 +78,7 @@ const ApplicationPieChart = () => {
         <h3 className="text-lg font-semibold text-blue-400 mt-1">
           VS Code (40%)
         </h3>
+
       </div>
 
     </div>

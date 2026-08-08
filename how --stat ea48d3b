@@ -1,0 +1,19 @@
+* [33mea48d3b[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mfeature/frontend-dashboard[m[33m)[m Update frontend dashboard
+[31m|[m * [33mbcc5f2e[m[33m ([m[1;31morigin/feature/frontend-dashboard[m[33m)[m email verification done
+[31m|[m * [33m2f39972[m email verification done
+[31m|[m * [33m4e818b1[m Integrate frontend with backend
+[31m|[m * [33m7ab0be6[m Fix auth package __init__.py filename
+[31m|[m * [33maedeb42[m Add .gitignore and stop tracking generated files
+[31m|[m *   [33m06ad5ae[m Merge remote-tracking branch 'origin/feature/desktop-monitor' into feature/frontend-dashboard
+[31m|[m [33m|[m[34m\[m  
+[31m|[m * [34m|[m [33m74218c1[m landing page , login and registration frontend done
+[31m|[m[31m/[m [34m/[m  
+* [34m|[m [33m9aae9b4[m[33m ([m[1;31morigin/develop[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mdevelop[m[33m)[m Project initial setup with folder structure and common configuration
+* [34m|[m [33m21082b6[m Project initial setup with folder structure and common configuration
+* [34m|[m [33m754166b[m Fix duplicate title and add project description
+[34m|[m [34m|[m * [33m1a47bba[m[33m ([m[1;31morigin/feature/desktop-monitor[m[33m)[m add new changes
+[34m|[m [34m|[m[34m/[m  
+[34m|[m * [33mc2322c0[m authentication complete
+[34m|[m * [33m1151774[m models created
+[34m|[m * [33m7bb00e6[m backend setup done
+[34m|[m[34m/[m  

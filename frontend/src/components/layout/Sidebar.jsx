@@ -1,95 +1,119 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
 import {
-  BrainCircuit,
   LayoutDashboard,
   Activity,
-  Monitor,
-  BarChart3,
-  History,
+  Thermometer,
+  BrainCircuit,
+  FileText,
   Lightbulb,
-  User,
+  History,
   Settings,
-  LogOut,
+  User,
 } from "lucide-react";
 
-/**
- * Professional Desktop Sidebar
- * AI Digital Fatigue & Burnout Detection System
- */
+const Sidebar = () => {
+  const navItems = [
+    {
+      name: "Dashboard",
+      path: "/dashboard",
+      icon: LayoutDashboard,
+    },
+    {
+      name: "Activity",
+      path: "/activity",
+      icon: Activity,
+    },
+    {
+      name: "Environment",
+      path: "/environment",
+      icon: Thermometer,
+    },
+    {
+      name: "Fatigue Prediction",
+      path: "/fatigue-prediction",
+      icon: BrainCircuit,
+    },
+    {
+      name: "Reports",
+      path: "/reports",
+      icon: FileText,
+    },
+    {
+      name: "Recommendations",
+      path: "/recommendations",
+      icon: Lightbulb,
+    },
+    {
+      name: "History",
+      path: "/history",
+      icon: History,
+    },
+    {
+      name: "Settings",
+      path: "/settings",
+      icon: Settings,
+    },
+    {
+      name: "Profile",
+      path: "/profile",
+      icon: User,
+    },
+  ];
 
-const menuItems = [
-  { name: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
-  { name: "Activity", icon: Activity, path: "/activity" },
-  { name: "Environment", icon: Monitor, path: "/environment" },
-  { name: "Prediction", icon: BrainCircuit, path: "/prediction" },
-  { name: "Reports", icon: BarChart3, path: "/reports" },
-  { name: "History", icon: History, path: "/history" },
-  { name: "Recommendations", icon: Lightbulb, path: "/recommendations" },
-  { name: "Profile", icon: User, path: "/profile" },
-  { name: "Settings", icon: Settings, path: "/settings" },
-];
-
-export default function Sidebar() {
   return (
-    <aside className="fixed left-0 top-0 h-screen w-[260px] bg-slate-900 border-r border-slate-700 text-slate-100 flex flex-col">
-      {/* Logo */}
-      <div className="px-6 py-7 border-b border-slate-700">
-        <div className="flex items-center gap-3">
-          <div className="bg-blue-600 p-3 rounded-xl shadow-lg">
-            <BrainCircuit size={24} />
-          </div>
-          <div>
-            <h1 className="font-bold text-sm leading-tight">
-              AI Digital Fatigue
-            </h1>
-            <p className="text-xs text-slate-400 leading-tight">
-              Burnout Detection
-            </p>
-          </div>
+    <aside className="fixed left-0 top-0 h-screen w-[260px] bg-slate-900 border-r border-slate-800 z-50">
+
+      {/* ================= Logo / Project Name ================= */}
+      <div className="h-[130px] flex items-center px-6 border-b border-slate-800">
+
+        <div className="w-14 h-14 rounded-xl bg-blue-600 flex items-center justify-center">
+          <BrainCircuit className="w-8 h-8 text-white" />
         </div>
+
+        <div className="ml-4">
+          <h1 className="text-white font-bold text-lg leading-tight">
+            AI Digital Fatigue
+          </h1>
+
+          <p className="text-slate-400 text-sm">
+            Burnout Detection
+          </p>
+        </div>
+
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-4 py-6 space-y-2">
-        {menuItems.map((item) => {
+      {/* ================= Navigation ================= */}
+      <nav className="p-4 space-y-2">
+
+        {navItems.map((item) => {
           const Icon = item.icon;
+
           return (
             <NavLink
-              key={item.name}
+              key={item.path}
               to={item.path}
               className={({ isActive }) =>
-                `group flex items-center gap-3 rounded-xl px-4 py-3 transition-all duration-200 ${
+                `flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-200 ${
                   isActive
-                    ? "bg-blue-600 text-white shadow-md"
-                    : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                    ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
+                    : "text-slate-400 hover:bg-slate-800 hover:text-white"
                 }`
               }
             >
-              <Icon size={20} />
-              <span className="text-sm font-medium">{item.name}</span>
+              <Icon className="w-5 h-5" />
+
+              <span className="font-medium">
+                {item.name}
+              </span>
             </NavLink>
           );
         })}
+
       </nav>
 
-      {/* User / Logout */}
-      <div className="border-t border-slate-700 p-4">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="h-10 w-10 rounded-full bg-blue-600 flex items-center justify-center font-semibold">
-            A
-          </div>
-          <div>
-            <p className="text-sm font-semibold">Amruta Shete</p>
-            <p className="text-xs text-slate-400">Research User</p>
-          </div>
-        </div>
-
-        <button className="w-full flex items-center gap-3 rounded-xl border border-slate-700 px-4 py-3 text-slate-300 hover:bg-red-600 hover:border-red-600 hover:text-white transition-all duration-200">
-          <LogOut size={18} />
-          <span className="text-sm font-medium">Logout</span>
-        </button>
-      </div>
     </aside>
   );
-}
+};
+
+export default Sidebar;

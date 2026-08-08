@@ -37,8 +37,8 @@ const KeyboardMouseChart = () => {
           <XAxis dataKey="name" stroke="#94a3b8" />
           <YAxis stroke="#94a3b8" />
           <Tooltip />
-          <Bar dataKey="Keyboard" radius={[6, 6, 0, 0]} />
-          <Bar dataKey="Mouse" radius={[6, 6, 0, 0]} />
+          <Bar dataKey="Keyboard" fill="#3B82F6" radius={[6, 6, 0, 0]} />
+          <Bar dataKey="Mouse" fill="#A855F7" radius={[6, 6, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
 

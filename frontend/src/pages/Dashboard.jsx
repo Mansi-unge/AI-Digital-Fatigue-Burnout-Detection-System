@@ -121,159 +121,365 @@ const Dashboard = () => {
 
       </div>
 
-      {/* ================= Activity + AI Status ================= */}
+{/* ================= Live Activity + AI Status ================= */}
 
-      <div className="grid grid-cols-12 gap-6">
+<div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
 
-        {/* Activity Chart */}
-        <div className="col-span-8">
-          <ActivityChart />
+  {/* Activity Chart */}
+  <div className="lg:col-span-2 h-full">
+    <ActivityChart />
+  </div>
+
+  {/* AI Status */}
+  <div className="lg:col-span-1 h-full">
+
+    <div
+      className="
+        h-full
+        bg-slate-900
+        rounded-2xl
+        border
+        border-slate-800
+        p-6
+        shadow-lg
+        transition-all
+        duration-300
+        hover:border-blue-500/40
+        hover:shadow-blue-500/10
+      "
+    >
+
+      <h2 className="text-xl font-bold text-white mb-6">
+        AI Status
+      </h2>
+
+      <div className="space-y-7">
+
+        {/* Fatigue Score */}
+        <div>
+          <p className="text-slate-400">
+            Fatigue Score
+          </p>
+
+          <h1 className="text-5xl font-bold text-orange-400 mt-2">
+            42%
+          </h1>
+
+          <div className="w-full h-3 rounded-full bg-slate-700 mt-4">
+            <div className="w-[42%] h-3 rounded-full bg-orange-500"></div>
+          </div>
         </div>
 
-        {/* AI Status */}
-        <div className="col-span-4 bg-slate-900 hover:shadow-blue-500/10
-hover:border-blue-500/40
-transition-all
-duration-300 rounded-2xl border border-slate-800 p-6 shadow-lg">
+        {/* Burnout Risk */}
+        <div>
+          <p className="text-slate-400">
+            Burnout Risk
+          </p>
 
-          <h2 className="text-xl font-bold text-white mb-6">
-            AI Status
+          <h2 className="text-3xl font-bold text-green-400 mt-2">
+            LOW
           </h2>
+        </div>
 
-          <div className="space-y-7">
+        {/* AI Confidence */}
+        <div>
+          <p className="text-slate-400">
+            AI Confidence
+          </p>
 
-            <div>
-              <p className="text-slate-400">
-                Fatigue Score
-              </p>
+          <h2 className="text-3xl font-bold text-blue-400 mt-2">
+            96%
+          </h2>
+        </div>
 
-              <h1 className="text-5xl font-bold text-orange-400 mt-2">
-                42%
-              </h1>
+        {/* Recommendation */}
+        <div className="rounded-xl bg-green-500/10 border border-green-500/30 p-4">
 
-              <div className="w-full h-3 rounded-full bg-slate-700 mt-4">
-                <div className="w-[42%] h-3 rounded-full bg-orange-500"></div>
-              </div>
+          <h3 className="font-semibold text-green-400">
+            Recommendation
+          </h3>
 
-            </div>
-
-            <div>
-              <p className="text-slate-400">
-                Burnout Risk
-              </p>
-
-              <h2 className="text-3xl font-bold text-green-400 mt-2">
-                LOW
-              </h2>
-            </div>
-
-            <div>
-              <p className="text-slate-400">
-                AI Confidence
-              </p>
-
-              <h2 className="text-3xl font-bold text-blue-400 mt-2">
-                96%
-              </h2>
-            </div>
-
-            <div className="rounded-xl bg-green-500/10 border border-green-500/30 p-4">
-
-              <h3 className="font-semibold text-green-400">
-                Recommendation
-              </h3>
-
-              <p className="text-green-300 text-sm mt-2">
-                Continue working. Take a short break after 30 minutes.
-              </p>
-
-            </div>
-
-          </div>
+          <p className="text-green-300 text-sm mt-2">
+            Continue working. Take a short break after 30 minutes.
+          </p>
 
         </div>
 
       </div>
 
-      {/* ================= Pie + Bar ================= */}
+    </div>
 
-      <div className="grid grid-cols-12 gap-6">
+  </div>
 
-        <div className="col-span-3">
-          <ApplicationPieChart />
+</div>
+
+      {/* ================= Application & Keyboard Activity ================= */}
+
+<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+  {/* Application Usage */}
+  <div className="w-full">
+    <ApplicationPieChart />
+  </div>
+
+  {/* Keyboard vs Mouse Activity */}
+  <div className="w-full">
+    <KeyboardMouseChart />
+  </div>
+
+</div>
+
+      {/* ================= Environment + AI Recommendation ================= */}
+
+<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+  {/* ================= Environment ================= */}
+
+  <div
+    className="
+      bg-slate-900
+      rounded-2xl
+      border
+      border-slate-800
+      p-6
+      shadow-lg
+      transition-all
+      duration-300
+      hover:border-blue-500/40
+      hover:shadow-blue-500/10
+    "
+  >
+
+    {/* Header */}
+
+    <div className="flex items-center gap-3 mb-8">
+
+      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-500/10">
+        <Thermometer
+          size={22}
+          className="text-blue-400"
+        />
+      </div>
+
+      <div>
+        <h2 className="text-xl font-bold text-white">
+          Environment
+        </h2>
+
+        <p className="text-sm text-slate-500 mt-1">
+          Current workspace conditions
+        </p>
+      </div>
+
+    </div>
+
+
+    {/* Environment Metrics */}
+
+    <div className="space-y-5">
+
+      {/* Temperature */}
+
+      <div className="flex items-center justify-between rounded-xl bg-slate-800/50 p-4">
+
+        <div>
+          <p className="text-sm text-slate-400">
+            Temperature
+          </p>
+
+          <p className="text-xs text-slate-600 mt-1">
+            Room temperature
+          </p>
         </div>
 
-        <div className="col-span-3">
-          <KeyboardMouseChart />
-        </div>
+        <span className="text-lg font-semibold text-white">
+          27°C
+        </span>
 
       </div>
 
-      {/* ================= Environment + Recommendation ================= */}
 
-      <div className="grid grid-cols-12 gap-6">
+      {/* Light */}
 
-        <div className="col-span-5 bg-slate-900 hover:shadow-blue-500/10
-hover:border-blue-500/40
-transition-all
-duration-300 rounded-2xl border border-slate-800 p-6">
+      <div className="flex items-center justify-between rounded-xl bg-slate-800/50 p-4">
 
-          <div className="flex items-center gap-3 mb-10">
-            <Thermometer className="text-blue-400" />
-            <h2 className="text-xl font-bold text-white">
-              Environment
-            </h2>
-          </div>
+        <div>
+          <p className="text-sm text-slate-400">
+            Light
+          </p>
 
-          <div className="space-y-5 text-slate-300">
-
-            <div className="flex justify-between">
-              <span>Temperature</span>
-              <span>27°C</span>
-            </div>
-
-            <div className="flex justify-between">
-              <span>Light</span>
-              <span>420 Lux</span>
-            </div>
-
-            <div className="flex justify-between">
-              <span>Brightness</span>
-              <span>80%</span>
-            </div>
-
-            <div className="flex justify-between">
-              <span>Battery</span>
-              <span>87%</span>
-            </div>
-
-          </div>
-
+          <p className="text-xs text-slate-600 mt-1">
+            Ambient light level
+          </p>
         </div>
 
-        <div className="col-span-7 bg-slate-900 hover:shadow-blue-500/10
-hover:border-blue-500/40
-transition-all
-duration-300 rounded-2xl border border-slate-800 p-6">
-
-          <div className="flex items-center gap-3 mb-6">
-            <Lightbulb className="text-yellow-400" />
-            <h2 className="text-xl font-bold text-white">
-              AI Recommendation
-            </h2>
-          </div>
-
-          <ul className="space-y-4 text-slate-300 list-disc pl-5">
-            <li>Take a 5–10 minute break every hour.</li>
-            <li>Reduce screen brightness in low-light conditions.</li>
-            <li>Maintain typing posture.</li>
-            <li>Stay hydrated.</li>
-            <li>Avoid continuous work sessions longer than 2 hours.</li>
-          </ul>
-
-        </div>
+        <span className="text-lg font-semibold text-white">
+          420 Lux
+        </span>
 
       </div>
+
+
+      {/* Brightness */}
+
+      <div className="flex items-center justify-between rounded-xl bg-slate-800/50 p-4">
+
+        <div>
+          <p className="text-sm text-slate-400">
+            Screen Brightness
+          </p>
+
+          <p className="text-xs text-slate-600 mt-1">
+            Current display level
+          </p>
+        </div>
+
+        <span className="text-lg font-semibold text-white">
+          80%
+        </span>
+
+      </div>
+
+
+      {/* Battery */}
+
+      <div className="flex items-center justify-between rounded-xl bg-slate-800/50 p-4">
+
+        <div>
+          <p className="text-sm text-slate-400">
+            Battery
+          </p>
+
+          <p className="text-xs text-slate-600 mt-1">
+            Device battery level
+          </p>
+        </div>
+
+        <span className="text-lg font-semibold text-emerald-400">
+          87%
+        </span>
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+  {/* ================= AI Recommendation ================= */}
+
+  <div
+    className="
+      bg-slate-900
+      rounded-2xl
+      border
+      border-slate-800
+      p-6
+      shadow-lg
+      transition-all
+      duration-300
+      hover:border-yellow-500/30
+      hover:shadow-yellow-500/5
+    "
+  >
+
+    {/* Header */}
+
+    <div className="flex items-center gap-3 mb-8">
+
+      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-yellow-500/10">
+        <Lightbulb
+          size={22}
+          className="text-yellow-400"
+        />
+      </div>
+
+      <div>
+        <h2 className="text-xl font-bold text-white">
+          AI Recommendation
+        </h2>
+
+        <p className="text-sm text-slate-500 mt-1">
+          Personalized suggestions based on your activity
+        </p>
+      </div>
+
+    </div>
+
+
+    {/* Recommendation List */}
+
+    <div className="space-y-4">
+
+      <div className="flex gap-3 rounded-xl bg-slate-800/50 p-4">
+
+        <span className="mt-1 text-blue-400">
+          •
+        </span>
+
+        <p className="text-sm leading-relaxed text-slate-300">
+          Take a 5–10 minute break every hour.
+        </p>
+
+      </div>
+
+
+      <div className="flex gap-3 rounded-xl bg-slate-800/50 p-4">
+
+        <span className="mt-1 text-blue-400">
+          •
+        </span>
+
+        <p className="text-sm leading-relaxed text-slate-300">
+          Reduce screen brightness in low-light conditions.
+        </p>
+
+      </div>
+
+
+      <div className="flex gap-3 rounded-xl bg-slate-800/50 p-4">
+
+        <span className="mt-1 text-blue-400">
+          •
+        </span>
+
+        <p className="text-sm leading-relaxed text-slate-300">
+          Maintain a comfortable typing and sitting posture.
+        </p>
+
+      </div>
+
+
+      <div className="flex gap-3 rounded-xl bg-slate-800/50 p-4">
+
+        <span className="mt-1 text-blue-400">
+          •
+        </span>
+
+        <p className="text-sm leading-relaxed text-slate-300">
+          Stay hydrated during long work sessions.
+        </p>
+
+      </div>
+
+
+      <div className="flex gap-3 rounded-xl bg-slate-800/50 p-4">
+
+        <span className="mt-1 text-blue-400">
+          •
+        </span>
+
+        <p className="text-sm leading-relaxed text-slate-300">
+          Avoid continuous work sessions longer than 2 hours.
+        </p>
+
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
 
       {/* ================= Activity + Work Summary ================= */}
 
