@@ -74,6 +74,11 @@ class Settings(Base):
         default=True
     )
 
+    webcam_monitoring = Column(
+    Boolean,
+    default=True
+)
+
     # ==========================================
     # Notification Settings
     # ==========================================
