@@ -2,6 +2,9 @@ from flask import Blueprint, request, jsonify
 
 from backend.database.database import SessionLocal
 from backend.auth.auth_service import register_user, login_user
+from backend.auth.forgot_password import forgot_password
+from backend.auth.verify_otp import verify_otp
+from backend.auth.reset_password import reset_password
 
 auth_bp = Blueprint("auth", __name__)
 
