@@ -1,25 +1,62 @@
 import React from "react";
+import { useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 
 const MainLayout = ({ children }) => {
-  return (
-    <div className="flex h-screen bg-slate-950">
+  const location = useLocation();
 
-      {/* Sidebar */}
+  // Hide global header on pages that have their own layout
+  const hideHeader =
+    location.pathname === "/notifications" ||
+    location.pathname === "/profile";
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-slate-50">
+
+      {/* ======================================================
+          SIDEBAR
+      ====================================================== */}
+
       <Sidebar />
 
-      {/* Right Section */}
-      <div className="flex-1 ml-[260px] flex flex-col">
+      {/* ======================================================
+          RIGHT APPLICATION AREA
+      ====================================================== */}
 
-        {/* Header */}
-        <Header />
+      <div
+        className="
+          flex
+          min-w-0
+          flex-1
+          flex-col
+          ml-[260px]
+        "
+      >
 
-        {/* Page Content */}
-        <main className="flex-1 overflow-auto p-6 bg-slate-950">
+        {/* ====================================================
+            GLOBAL HEADER
 
+            Hidden on:
+            - Notifications
+            - Profile
+        ==================================================== */}
+
+        {!hideHeader && <Header />}
+
+        {/* ====================================================
+            PAGE CONTENT
+        ==================================================== */}
+
+        <main
+          className="
+            min-h-0
+            flex-1
+            overflow-auto
+            bg-slate-50
+          "
+        >
           {children}
-
         </main>
 
       </div>

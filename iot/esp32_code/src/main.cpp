@@ -8,11 +8,16 @@
 // WIFI
 // =====================================================
 
-const char* WIFI_SSID = "Mansi";
-const char* WIFI_PASSWORD = "00000000";
-
+// const char* WIFI_SSID = "Mansiunge";
+// const char* WIFI_PASSWORD = "987654321";
+const char* WIFI_SSID = "vivo 1901";
+const char* WIFI_PASSWORD = "sanjayunge";
+// const char* WIFI_SSID = "Redmi 9";
+// const char* WIFI_PASSWORD = "shiu1234";
+// const char* WIFI_SSID = "moto g67 power 5G_1804";
+// const char* WIFI_PASSWORD = "12345678";
 // Laptop IPv4 address
-const char* serverUrl = "http://10.173.18.156:5000/iot-data";
+const char* serverUrl = "http://192.168.82.156:5000/monitoring/iot-data";
 
 
 // =====================================================

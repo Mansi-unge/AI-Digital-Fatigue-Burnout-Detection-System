@@ -49,6 +49,26 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan"
     )
-
+    monitoring_sessions = relationship(
+        "MonitoringSession",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+    recommendations = relationship(
+        "Recommendation",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+    notifications = relationship(
+        "Notification",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    settings = relationship(
+        "Settings",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
     def __repr__(self):
         return f"<User {self.name}>"

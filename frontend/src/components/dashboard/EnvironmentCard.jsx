@@ -2,38 +2,28 @@ import React from "react";
 import {
   Thermometer,
   Sun,
-  Monitor,
-  Battery,
+  Waves,
+  Ruler,
+  Activity,
 } from "lucide-react";
 
-const EnvironmentCard = () => {
+const EnvironmentCard = ({ latest }) => {
   return (
     <div
       className="
-        bg-slate-900
-        rounded-2xl
-        border
-        border-slate-800
+        bg-white
+        rounded-lg
+        border border-slate-200
         p-6
-        shadow-lg
-        transition-all
-        duration-300
-        hover:border-blue-500/40
-        hover:shadow-blue-500/10
+        shadow-sm
+        hover:shadow-md
+        transition
       "
     >
       {/* Header */}
-      <div className="flex items-center gap-3 mb-8">
-
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-500/10">
-          <Thermometer
-            size={22}
-            className="text-blue-400"
-          />
-        </div>
-
+      <div className="flex items-center justify-between mb-7">
         <div>
-          <h2 className="text-xl font-bold text-white">
+          <h2 className="text-xl font-bold text-slate-800">
             Environment
           </h2>
 
@@ -42,98 +32,109 @@ const EnvironmentCard = () => {
           </p>
         </div>
 
+        <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center">
+          <Thermometer
+            size={21}
+            className="text-blue-600"
+          />
+        </div>
       </div>
 
-      {/* Environment Metrics */}
+      {/* Environment Values */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
         {/* Temperature */}
-        <div className="rounded-xl bg-slate-800/50 p-4">
-          <div className="flex items-center justify-between">
+        <EnvironmentItem
+          icon={Thermometer}
+          iconStyle="bg-orange-50 text-orange-500"
+          title="Temperature"
+          value={
+            latest?.temperature != null
+              ? `${Number(latest.temperature).toFixed(1)}°C`
+              : "—"
+          }
+        />
 
-            <div className="flex items-center gap-3">
-              <Thermometer
-                size={20}
-                className="text-blue-400"
-              />
-
-              <span className="text-sm text-slate-400">
-                Temperature
-              </span>
-            </div>
-
-            <span className="text-lg font-semibold text-white">
-              27°C
-            </span>
-
-          </div>
-        </div>
+        {/* Humidity */}
+        <EnvironmentItem
+          icon={Waves}
+          iconStyle="bg-blue-50 text-blue-600"
+          title="Humidity"
+          value={
+            latest?.humidity != null
+              ? `${Number(latest.humidity).toFixed(1)}%`
+              : "—"
+          }
+        />
 
         {/* Light */}
-        <div className="rounded-xl bg-slate-800/50 p-4">
-          <div className="flex items-center justify-between">
+        <EnvironmentItem
+          icon={Sun}
+          iconStyle="bg-yellow-50 text-yellow-600"
+          title="Light"
+          value={
+            latest?.light != null
+              ? `${Number(latest.light).toFixed(1)} Lux`
+              : "—"
+          }
+        />
 
-            <div className="flex items-center gap-3">
-              <Sun
-                size={20}
-                className="text-yellow-400"
-              />
+        {/* Distance */}
+        <EnvironmentItem
+          icon={Ruler}
+          iconStyle="bg-violet-50 text-violet-600"
+          title="Distance"
+          value={
+            latest?.distance != null
+              ? `${Number(latest.distance).toFixed(1)} cm`
+              : "—"
+          }
+        />
 
-              <span className="text-sm text-slate-400">
-                Light
-              </span>
-            </div>
+        {/* Motion */}
+        <EnvironmentItem
+          icon={Activity}
+          iconStyle="bg-emerald-50 text-emerald-600"
+          title="Motion"
+          value={
+            latest?.motion != null
+              ? latest.motion
+                ? "Detected"
+                : "No Motion"
+              : "—"
+          }
+        />
 
-            <span className="text-lg font-semibold text-white">
-              420 Lux
-            </span>
+      </div>
+    </div>
+  );
+};
 
+const EnvironmentItem = ({
+  icon: Icon,
+  iconStyle,
+  title,
+  value,
+}) => {
+  return (
+    <div className="rounded-xl bg-slate-50 border border-slate-100 p-4">
+      <div className="flex items-center justify-between">
+
+        <div className="flex items-center gap-3">
+          <div
+            className={`h-9 w-9 rounded-lg flex items-center justify-center ${iconStyle}`}
+          >
+            <Icon size={18} />
           </div>
+
+          <span className="text-sm text-slate-500">
+            {title}
+          </span>
         </div>
 
-        {/* Brightness */}
-        <div className="rounded-xl bg-slate-800/50 p-4">
-          <div className="flex items-center justify-between">
-
-            <div className="flex items-center gap-3">
-              <Monitor
-                size={20}
-                className="text-purple-400"
-              />
-
-              <span className="text-sm text-slate-400">
-                Brightness
-              </span>
-            </div>
-
-            <span className="text-lg font-semibold text-white">
-              80%
-            </span>
-
-          </div>
-        </div>
-
-        {/* Battery */}
-        <div className="rounded-xl bg-slate-800/50 p-4">
-          <div className="flex items-center justify-between">
-
-            <div className="flex items-center gap-3">
-              <Battery
-                size={20}
-                className="text-emerald-400"
-              />
-
-              <span className="text-sm text-slate-400">
-                Battery
-              </span>
-            </div>
-
-            <span className="text-lg font-semibold text-emerald-400">
-              87%
-            </span>
-
-          </div>
-        </div>
+        <span className="text-sm font-semibold text-slate-800">
+          {value}
+        </span>
 
       </div>
     </div>

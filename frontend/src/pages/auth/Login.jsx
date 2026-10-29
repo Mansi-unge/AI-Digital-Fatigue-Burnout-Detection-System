@@ -2,11 +2,12 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
 import api from "../../api/axios";
+import { toast } from "react-toastify";
 
 const Login = () => {
   const navigate = useNavigate();
 
-  const [showPassword, setShowPassword] =useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const [formData, setFormData] = useState({
     email: "",
@@ -14,7 +15,9 @@ const Login = () => {
     rememberMe: false,
   });
 
-  // Load remembered email
+  // ==========================================
+  // LOAD REMEMBERED EMAIL
+  // ==========================================
 
   useEffect(() => {
     const rememberedEmail = localStorage.getItem("rememberEmail");
@@ -28,6 +31,10 @@ const Login = () => {
     }
   }, []);
 
+  // ==========================================
+  // HANDLE INPUT CHANGE
+  // ==========================================
+
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
 
@@ -36,6 +43,10 @@ const Login = () => {
       [name]: type === "checkbox" ? checked : value,
     }));
   };
+
+  // ==========================================
+  // LOGIN
+  // ==========================================
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -48,37 +59,91 @@ const Login = () => {
 
       if (response.data.success) {
 
-        // Remember Email
+        // ==========================================
+        // REMEMBER EMAIL
+        // ==========================================
 
         if (formData.rememberMe) {
-          localStorage.setItem("rememberEmail", formData.email);
+          localStorage.setItem(
+            "rememberEmail",
+            formData.email
+          );
         } else {
           localStorage.removeItem("rememberEmail");
         }
 
-        // Store logged in user
+        // ==========================================
+        // STORE LOGGED-IN USER
+        // ==========================================
 
-        localStorage.setItem("user_id", response.data.user_id);
-        localStorage.setItem("name", response.data.name);
+        const loggedInUser = {
+          id: response.data.user_id,
+          name: response.data.name,
+          email: formData.email,
+        };
 
-        alert(response.data.message);
+        localStorage.setItem(
+          "user",
+          JSON.stringify(loggedInUser)
+        );
 
-        navigate("/dashboard");
+        // ==========================================
+        // SUCCESS MESSAGE
+        // ==========================================
+
+        toast.success("Login successful!", {
+          position: "top-right",
+          autoClose: 2000,
+        });
+
+        // ==========================================
+        // GO TO CHOOSE MODE
+        // ==========================================
+
+        navigate("/choose-mode");
 
       } else {
-        alert(response.data.message);
+
+        toast.error(
+          response.data.message || "Login failed",
+          {
+            position: "top-right",
+            autoClose: 3000,
+          }
+        );
+
       }
 
     } catch (error) {
 
       if (error.response) {
-        alert(error.response.data.message);
-      } else {
-        alert("Unable to connect to server.");
-      }
 
+        toast.error(
+          error.response.data.message ||
+            "Invalid email or password",
+          {
+            position: "top-right",
+            autoClose: 3000,
+          }
+        );
+
+      } else {
+
+        toast.error(
+          "Unable to connect to server. Please try again.",
+          {
+            position: "top-right",
+            autoClose: 3000,
+          }
+        );
+
+      }
     }
   };
+
+  // ==========================================
+  // INPUT STYLE
+  // ==========================================
 
   const inputStyle =
     "w-full rounded-lg border border-slate-300 px-4 py-2.5 mt-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500";
@@ -88,7 +153,9 @@ const Login = () => {
 
       <div className="w-full max-w-md">
 
-        {/* Logo */}
+        {/* ==========================================
+            LOGO
+        ========================================== */}
 
         <div className="text-center mb-8">
 
@@ -101,8 +168,15 @@ const Login = () => {
             <div className="text-left">
 
               <h1 className="text-5xl font-bold tracking-tight">
-                <span className="text-slate-800">Vita</span>
-                <span className="text-blue-600">Sense</span>
+
+                <span className="text-slate-800">
+                  Vita
+                </span>
+
+                <span className="text-blue-600">
+                  Sense
+                </span>
+
               </h1>
 
               <p className="text-sm text-slate-500">
@@ -115,7 +189,10 @@ const Login = () => {
 
         </div>
 
-        {/* Login Card */}
+
+        {/* ==========================================
+            LOGIN CARD
+        ========================================== */}
 
         <div className="bg-white rounded-xl shadow-md p-8">
 
@@ -127,9 +204,15 @@ const Login = () => {
             Sign in to continue
           </p>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
 
-            {/* Email */}
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-5"
+          >
+
+            {/* ==========================================
+                EMAIL
+            ========================================== */}
 
             <div>
 
@@ -149,7 +232,10 @@ const Login = () => {
 
             </div>
 
-            {/* Password */}
+
+            {/* ==========================================
+                PASSWORD
+            ========================================== */}
 
             <div>
 
@@ -160,7 +246,11 @@ const Login = () => {
               <div className="relative">
 
                 <input
-                  type={showPassword ? "text" : "password"}
+                  type={
+                    showPassword
+                      ? "text"
+                      : "password"
+                  }
                   name="password"
                   required
                   value={formData.password}
@@ -171,21 +261,30 @@ const Login = () => {
 
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
+                  onClick={() =>
+                    setShowPassword(
+                      !showPassword
+                    )
+                  }
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-blue-600"
                 >
+
                   {showPassword ? (
                     <FaEyeSlash size={18} />
                   ) : (
                     <FaEye size={18} />
                   )}
+
                 </button>
 
               </div>
 
             </div>
 
-            {/* Remember Me & Forgot Password */}
+
+            {/* ==========================================
+                REMEMBER ME / FORGOT PASSWORD
+            ========================================== */}
 
             <div className="flex items-center justify-between">
 
@@ -203,6 +302,7 @@ const Login = () => {
 
               </label>
 
+
               <Link
                 to="/forgot-password"
                 className="text-sm text-blue-600 hover:text-blue-700 hover:underline font-medium"
@@ -212,7 +312,10 @@ const Login = () => {
 
             </div>
 
-            {/* Login Button */}
+
+            {/* ==========================================
+                LOGIN BUTTON
+            ========================================== */}
 
             <button
               type="submit"
@@ -225,7 +328,10 @@ const Login = () => {
 
         </div>
 
-        {/* Register */}
+
+        {/* ==========================================
+            REGISTER
+        ========================================== */}
 
         <p className="text-center mt-6 text-slate-600">
 
