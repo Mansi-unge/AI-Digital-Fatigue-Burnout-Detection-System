@@ -33,6 +33,10 @@ class User(Base):
     # Authentication
     password_hash = Column(String(255), nullable=False)
 
+    # Password Reset OTP
+    otp = Column(String(6), nullable=True)
+    otp_expiry = Column(DateTime, nullable=True)
+
     # Verification Status
     email_verified = Column(Boolean, default=False)
     mobile_verified = Column(Boolean, default=False)
@@ -52,3 +56,22 @@ class User(Base):
 
     def __repr__(self):
         return f"<User {self.name}>"
+
+    reports = relationship(
+    "Report",
+    back_populates="user",
+    cascade="all, delete-orphan"
+)
+
+    recommendations = relationship(
+    "Recommendation",
+    back_populates="user",
+    cascade="all, delete-orphan"
+)
+
+    settings = relationship(
+    "Settings",
+    back_populates="user",
+    uselist=False,
+    cascade="all, delete-orphan"
+)

@@ -121,3 +121,13 @@ reports/
 
 secret.json
 credentials.json
+
+# VS Code
+.vscode/
+
+# Node
+node_modules/
+
+# React Build
+dist/
+build/
