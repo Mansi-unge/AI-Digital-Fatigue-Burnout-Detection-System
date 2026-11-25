@@ -1,30 +1,63 @@
+
 from flask import Blueprint, request, jsonify
+from datetime import datetime, timedelta
 
-from backend.prediction.prediction_service import PredictionService
-from backend.recommendations.recommendation_service import (
-    RecommendationService
-)
-
+from backend.database.database import SessionLocal
+from backend.database.models.recommendations import Recommendation
+from backend.database.models.notification import Notification
 
 recommendation_bp = Blueprint(
     "recommendations",
     __name__,
     url_prefix="/recommendations"
 )
+def delete_expired_recommendations(db):
+    cutoff_time = datetime.utcnow() - timedelta(hours=23)
 
+    expired_ids = [
+        row[0]
+        for row in (
+            db.query(Recommendation.id)
+            .filter(Recommendation.created_at < cutoff_time)
+            .all()
+        )
+    ]
 
-prediction_service = PredictionService()
-recommendation_service = RecommendationService()
+    if not expired_ids:
+        return 0
 
+    # Keep notifications, but remove their link to the deleted recommendation.
+    # This allows the notification's own seen/one-hour lifecycle to continue.
+    db.query(Notification).filter(
+        Notification.recommendation_id.in_(expired_ids)
+    ).update(
+        {Notification.recommendation_id: None},
+        synchronize_session=False
+    )
+
+    deleted_count = (
+        db.query(Recommendation)
+        .filter(Recommendation.id.in_(expired_ids))
+        .delete(synchronize_session=False)
+    )
+
+    db.commit()
+    return deleted_count
 
 # ==========================================================
-# GET CURRENT RECOMMENDATIONS
+# GET SAVED RECOMMENDATIONS (LAST 23 HOURS)
 # ==========================================================
 
 @recommendation_bp.route("/current", methods=["GET"])
 def current_recommendations():
 
+    db = SessionLocal()
+
     try:
+
+        # ==================================================
+        # GET USER ID
+        # ==================================================
 
         user_id = request.args.get(
             "user_id",
@@ -39,52 +72,64 @@ def current_recommendations():
             }), 400
 
         # ==================================================
-        # GET CURRENT AI PREDICTION
+        # CALCULATE 23-HOUR RETENTION WINDOW
         # ==================================================
 
-        prediction_result = (
-            prediction_service
-            .get_current_prediction(
-                user_id=user_id
-            )
+        current_time = datetime.utcnow()
+
+        cutoff_time = (
+            current_time - timedelta(hours=23)
         )
-
-        if not prediction_result.get("success"):
-
-            return jsonify(
-                prediction_result
-            ), 500
-
+        delete_expired_recommendations(db)
         # ==================================================
-        # NO PREDICTION YET
-        # ==================================================
-
-        if not prediction_result.get(
-            "has_prediction",
-            False
-        ):
-
-            return jsonify({
-                "success": True,
-                "has_recommendations": False,
-                "message": prediction_result.get(
-                    "message",
-                    "Not enough monitoring data yet"
-                ),
-                "recommendations": []
-            }), 200
-
-        # ==================================================
-        # GENERATE RECOMMENDATIONS
+        # FETCH SAVED RECOMMENDATIONS
         # ==================================================
 
         recommendations = (
-            recommendation_service
-            .generate_recommendations(
-                prediction_result,
-                user_id
+            db.query(Recommendation)
+            .filter(
+                Recommendation.user_id == user_id,
+                Recommendation.created_at >= cutoff_time,
+                Recommendation.created_at <= current_time
             )
+            .order_by(
+                Recommendation.created_at.desc()
+            )
+            .all()
         )
+
+        # ==================================================
+        # SERIALIZE RECOMMENDATIONS
+        # ==================================================
+
+        recommendation_list = []
+
+        for recommendation in recommendations:
+
+            recommendation_list.append({
+
+                "id": recommendation.id,
+
+                "title": recommendation.title,
+
+                "type": (
+                    recommendation.category
+                    or "General"
+                ),
+
+                "message": recommendation.description,
+
+                "priority": recommendation.priority,
+
+                "created_at": (
+                    recommendation.created_at.isoformat()
+                    if recommendation.created_at
+                    else None
+                ),
+
+                "is_completed": recommendation.is_completed
+
+            })
 
         # ==================================================
         # RESPONSE
@@ -94,19 +139,30 @@ def current_recommendations():
 
             "success": True,
 
-            "has_recommendations": True,
-
-            "session_id": prediction_result.get(
-                "session_id"
+            "has_recommendations": (
+                len(recommendation_list) > 0
             ),
 
-            "recommendations": recommendations
+            "recommendations": recommendation_list,
+
+            "total": len(recommendation_list),
+
+            "retention_hours": 23
 
         }), 200
 
     except Exception as e:
 
+        db.rollback()
+
         return jsonify({
+
             "success": False,
+
             "message": str(e)
+
         }), 500
+
+    finally:
+
+        db.close()

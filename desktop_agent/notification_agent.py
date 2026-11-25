@@ -1,96 +1,118 @@
-from winotify import Notification, audio
-
-from dotenv import load_dotenv
 
 import os
-import time
-import requests
 import sys
+import time
+from urllib.parse import urlparse, parse_qs
+
+import requests
 import winreg
+from dotenv import load_dotenv
+from winotify import Notification, audio
 
 
 # ==========================================================
-# PROJECT PATH
+# PROJECT PATHS AND ENVIRONMENT
 # ==========================================================
 
 BASE_DIR = os.path.dirname(
-    os.path.dirname(
-        os.path.abspath(__file__)
-    )
+    os.path.dirname(os.path.abspath(__file__))
 )
 
-
-# ==========================================================
-# LOAD ENVIRONMENT
-# ==========================================================
-
-backend_env = os.path.join(
-    BASE_DIR,
-    "backend",
-    ".env"
-)
-
-root_env = os.path.join(
-    BASE_DIR,
-    ".env"
-)
+backend_env = os.path.join(BASE_DIR, "backend", ".env")
+root_env = os.path.join(BASE_DIR, ".env")
 
 if os.path.exists(backend_env):
     load_dotenv(backend_env)
-
 elif os.path.exists(root_env):
     load_dotenv(root_env)
-
 else:
     load_dotenv()
 
 
 # ==========================================================
-# CONFIGURATION
+# ENVIRONMENT CONFIGURATION
 # ==========================================================
 
-BACKEND_URL = os.getenv(
-    "BACKEND_URL",
-    "http://127.0.0.1:5000"
-).rstrip("/")
+def get_required_env(name):
+    value = os.getenv(name)
+
+    if value is None or not value.strip():
+        raise RuntimeError(
+            f"Missing required environment variable: {name}"
+        )
+
+    return value.strip()
 
 
-# ==========================================================
-# DEVELOPMENT / PRODUCTION INTERVAL
-# ==========================================================
+VITE_API_URL = get_required_env("VITE_API_URL").rstrip("/")
 
-DEVELOPMENT_MODE = os.getenv(
-    "DEVELOPMENT_MODE",
-    "true"
-).lower() == "true"
-
-
-# Development popup interval
-# Default = 60 seconds
-
-DEV_INTERVAL = int(
-    os.getenv(
-        "DEV_NOTIFICATION_INTERVAL",
-        "60"
-    )
+FRONTEND_NOTIFICATIONS_URL = get_required_env(
+    "FRONTEND_NOTIFICATIONS_URL"
 )
 
+FATIGUE_APP_ID = get_required_env("FATIGUE_APP_ID")
+RECOMMENDATION_APP_ID = get_required_env("RECOMMENDATION_APP_ID")
 
-# Production popup interval
-# Default = 1500 seconds = 25 minutes
+PROTOCOL_NAME = get_required_env("VITASENSE_PROTOCOL")
 
-PRODUCTION_INTERVAL = int(
-    os.getenv(
-        "PRODUCTION_NOTIFICATION_INTERVAL",
-        "1500"
-    )
+REQUEST_TIMEOUT_SECONDS = float(
+    get_required_env("REQUEST_TIMEOUT_SECONDS")
 )
 
+STATUS_CHECK_INTERVAL = float(
+    get_required_env("STATUS_CHECK_INTERVAL_SECONDS")
+)
+
+NOTIFICATION_POLL_INTERVAL = float(
+    get_required_env("NOTIFICATION_POLL_INTERVAL_SECONDS")
+)
+
+LOOP_SLEEP_SECONDS = float(
+    get_required_env("AGENT_LOOP_SLEEP_SECONDS")
+)
+
+DEVELOPMENT_MODE = (
+    get_required_env("DEVELOPMENT_MODE").lower() == "true"
+)
+
+DEV_NOTIFICATION_INTERVAL = float(
+    get_required_env("DEV_NOTIFICATION_INTERVAL_SECONDS")
+)
+
+PRODUCTION_NOTIFICATION_INTERVAL = float(
+    get_required_env("PRODUCTION_NOTIFICATION_INTERVAL_SECONDS")
+)
 
 POPUP_INTERVAL = (
-    DEV_INTERVAL
+    DEV_NOTIFICATION_INTERVAL
     if DEVELOPMENT_MODE
-    else PRODUCTION_INTERVAL
+    else PRODUCTION_NOTIFICATION_INTERVAL
+)
+
+SHOWN_NOTIFICATION_IDS_FILE = get_required_env(
+    "SHOWN_RECOMMENDATION_NOTIFICATION_IDS_FILE"
+)
+
+if not os.path.isabs(SHOWN_NOTIFICATION_IDS_FILE):
+    SHOWN_NOTIFICATION_IDS_FILE = os.path.join(
+        BASE_DIR,
+        SHOWN_NOTIFICATION_IDS_FILE,
+    )
+
+
+# ==========================================================
+# IMPORT RECOMMENDATION NOTIFICATION HELPER
+# ==========================================================
+
+from recommendation_notification import RecommendationNotificationManager
+
+
+recommendation_manager = RecommendationNotificationManager(
+    backend_url=VITE_API_URL,
+    app_id=RECOMMENDATION_APP_ID,
+    frontend_notifications_url=FRONTEND_NOTIFICATIONS_URL,
+    shown_ids_file=SHOWN_NOTIFICATION_IDS_FILE,
+    request_timeout=REQUEST_TIMEOUT_SECONDS,
 )
 
 
@@ -103,368 +125,119 @@ current_session_id = None
 current_mode = None
 
 
+def clear_current_monitoring():
+    global current_user_id
+    global current_session_id
+    global current_mode
+
+    current_user_id = None
+    current_session_id = None
+    current_mode = None
+
+
 # ==========================================================
 # GET CURRENT MONITORING SESSION
 # ==========================================================
 
 def get_current_monitoring():
-
     global current_user_id
     global current_session_id
     global current_mode
 
     try:
-
         response = requests.get(
-            f"{BACKEND_URL}/monitoring/status",
-            timeout=5
+            f"{VITE_API_URL}/monitoring/status",
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
 
         response.raise_for_status()
-
         data = response.json()
 
-        # --------------------------------------------------
-        # CHECK API SUCCESS
-        # --------------------------------------------------
-
-        if not data.get("success"):
-
-            print(
-                "Monitoring status request failed."
-            )
-
-            current_user_id = None
-            current_session_id = None
-            current_mode = None
-
+        if not data.get("success") or not data.get("running"):
+            clear_current_monitoring()
             return False
 
+        user_id = data.get("user_id")
+        session_id = data.get("session_id")
+        mode = str(data.get("mode") or "").upper()
 
-        # --------------------------------------------------
-        # CHECK WHETHER MONITORING IS RUNNING
-        # --------------------------------------------------
-
-        if not data.get("running"):
-
-            current_user_id = None
-            current_session_id = None
-            current_mode = None
-
-            print(
-                "No active monitoring session."
-            )
-
+        if user_id is None or session_id is None or not mode:
+            print("Active monitoring session has incomplete information.")
+            clear_current_monitoring()
             return False
 
-
-        # --------------------------------------------------
-        # GET USER ID
-        # --------------------------------------------------
-
-        current_user_id = data.get(
-            "user_id"
-        )
-
-
-        # --------------------------------------------------
-        # GET SESSION ID
-        # --------------------------------------------------
-
-        current_session_id = data.get(
-            "session_id"
-        )
-
-
-        # --------------------------------------------------
-        # GET MODE
-        # --------------------------------------------------
-
-        current_mode = data.get(
-            "mode"
-        )
-
-
-        # --------------------------------------------------
-        # VALIDATE USER ID
-        # --------------------------------------------------
-
-        if current_user_id is None:
-
-            print(
-                "Active monitoring has no user_id."
-            )
-
-            current_user_id = None
-            current_session_id = None
-            current_mode = None
-
-            return False
-
-
-        # --------------------------------------------------
-        # VALIDATE SESSION ID
-        # --------------------------------------------------
-
-        if current_session_id is None:
-
-            print(
-                "Active monitoring has no session_id."
-            )
-
-            current_user_id = None
-            current_session_id = None
-            current_mode = None
-
-            return False
-
-
-        # --------------------------------------------------
-        # VALIDATE MODE
-        # --------------------------------------------------
-
-        if current_mode is None:
-
-            print(
-                "Active monitoring has no mode."
-            )
-
-            current_user_id = None
-            current_session_id = None
-            current_mode = None
-
-            return False
-
-
-        # --------------------------------------------------
-        # DISPLAY CURRENT SESSION
-        # --------------------------------------------------
-
-        print(
-            f"Active monitoring: "
-            f"user_id={current_user_id}, "
-            f"session_id={current_session_id}, "
-            f"mode={current_mode}"
-        )
+        current_user_id = user_id
+        current_session_id = session_id
+        current_mode = mode
 
         return True
 
-
-    except requests.RequestException as e:
-
-        print(
-            "Could not connect to Flask backend."
-        )
-
-        print(
-            "Error:",
-            e
-        )
-
-        current_user_id = None
-        current_session_id = None
-        current_mode = None
-
+    except requests.RequestException as error:
+        print("Could not retrieve monitoring status:", error)
+        clear_current_monitoring()
         return False
 
-
-    except Exception as e:
-
-        print(
-            "Monitoring status error:",
-            e
-        )
-
-        current_user_id = None
-        current_session_id = None
-        current_mode = None
-
+    except (ValueError, TypeError) as error:
+        print("Invalid monitoring status response:", error)
+        clear_current_monitoring()
         return False
 
 
 # ==========================================================
-# SAVE FATIGUE RESPONSE
+# SAVE DATA COLLECTION FATIGUE RESPONSE
 # ==========================================================
 
-def save_fatigue_response(response):
-
-    global current_user_id
-    global current_session_id
-    global current_mode
-
-
-    print()
-    print("======================================")
-    print("       FATIGUE RESPONSE")
-    print("======================================")
-
-    print(
-        f"Response   : {response}"
-    )
-
-    print(
-        f"User ID    : {current_user_id}"
-    )
-
-    print(
-        f"Session ID : {current_session_id}"
-    )
-
-    print(
-        f"Mode       : {current_mode}"
-    )
-
-    print("======================================")
-
-
-    # ------------------------------------------------------
-    # VALIDATE USER
-    # ------------------------------------------------------
-
-    if current_user_id is None:
-
-        print(
-            "No active user."
-        )
-
+def save_fatigue_response(fatigue_level):
+    if current_user_id is None or current_session_id is None:
+        print("Cannot save fatigue response: no active session.")
         return False
-
-
-    # ------------------------------------------------------
-    # VALIDATE SESSION
-    # ------------------------------------------------------
-
-    if current_session_id is None:
-
-        print(
-            "No active session."
-        )
-
-        return False
-
-
-    # ------------------------------------------------------
-    # IMPORTANT:
-    # FATIGUE SELF-REPORT IS ONLY FOR
-    # DATA COLLECTION MODE
-    # ------------------------------------------------------
 
     if current_mode != "DATA_COLLECTION":
-
-        print(
-            "Fatigue response ignored."
-        )
-
-        print(
-            "Current mode:",
-            current_mode
-        )
-
+        print("Fatigue response ignored outside Data Collection mode.")
         return False
 
+    payload = {
+        "user_id": current_user_id,
+        "session_id": current_session_id,
+        "level": fatigue_level,
+    }
 
     try:
-
-        payload = {
-            "user_id": current_user_id,
-            "session_id": current_session_id,
-            "level": response
-        }
-
-
-        result = requests.post(
-
-            f"{BACKEND_URL}/monitoring/fatigue",
-
+        response = requests.post(
+            f"{VITE_API_URL}/monitoring/fatigue",
             json=payload,
-
-            timeout=5
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
 
+        print("Fatigue response HTTP status:", response.status_code)
+        print("Fatigue response backend result:", response.text)
 
-        print(
-            "Backend status:",
-            result.status_code
-        )
-
-        print(
-            "Backend response:",
-            result.text
-        )
-
-
-        if result.ok:
-
-            print(
-                "Fatigue response "
-                "saved successfully."
-            )
-
+        if response.ok:
+            print("Fatigue response saved successfully.")
             return True
 
+        print("Could not save fatigue response.")
+        return False
 
-        else:
-
-            print(
-                "Failed to save fatigue response."
-            )
-
-            return False
-
-
-    except requests.RequestException as e:
-
-        print(
-            "Backend connection error:"
-        )
-
-        print(e)
-
+    except requests.RequestException as error:
+        print("Fatigue response request failed:", error)
         return False
 
 
 # ==========================================================
-# REGISTER VITASENSE CUSTOM PROTOCOL
+# REGISTER WINDOWS CUSTOM PROTOCOL
 # ==========================================================
 
 def register_protocol():
-
-    protocol_name = "vitasense"
-
-
-    # ------------------------------------------------------
-    # USE PYTHONW.EXE
-    # ------------------------------------------------------
-
     python_executable = os.path.join(
         os.path.dirname(sys.executable),
-        "pythonw.exe"
+        "pythonw.exe",
     )
 
-
-    # ------------------------------------------------------
-    # FALLBACK
-    # ------------------------------------------------------
-
-    if not os.path.exists(
-        python_executable
-    ):
-
+    if not os.path.exists(python_executable):
         python_executable = sys.executable
 
-
-    # ------------------------------------------------------
-    # CURRENT SCRIPT
-    # ------------------------------------------------------
-
-    script_path = os.path.abspath(
-        __file__
-    )
-
-
-    # ------------------------------------------------------
-    # WINDOWS PROTOCOL COMMAND
-    # ------------------------------------------------------
+    script_path = os.path.abspath(__file__)
 
     command = (
         f'"{python_executable}" '
@@ -472,23 +245,25 @@ def register_protocol():
         f'"%1"'
     )
 
+    protocol_registry_path = (
+        rf"Software\Classes\{PROTOCOL_NAME}"
+    )
+
+    command_registry_path = (
+        rf"Software\Classes\{PROTOCOL_NAME}\shell\open\command"
+    )
 
     try:
-
-        # ==================================================
-        # PROTOCOL ROOT
-        # ==================================================
-
         with winreg.CreateKey(
             winreg.HKEY_CURRENT_USER,
-            rf"Software\Classes\{protocol_name}"
+            protocol_registry_path,
         ) as key:
-
-            winreg.SetValue(
+            winreg.SetValueEx(
                 key,
                 "",
+                0,
                 winreg.REG_SZ,
-                "VitaSense Fatigue Response"
+                "VitaSense Fatigue Response",
             )
 
             winreg.SetValueEx(
@@ -496,397 +271,234 @@ def register_protocol():
                 "URL Protocol",
                 0,
                 winreg.REG_SZ,
-                ""
+                "",
             )
-
-
-        # ==================================================
-        # OPEN COMMAND
-        # ==================================================
 
         with winreg.CreateKey(
             winreg.HKEY_CURRENT_USER,
-            rf"Software\Classes\{protocol_name}"
-            rf"\shell\open\command"
+            command_registry_path,
         ) as key:
-
-            winreg.SetValue(
+            winreg.SetValueEx(
                 key,
                 "",
+                0,
                 winreg.REG_SZ,
-                command
+                command,
             )
 
+        print("VitaSense custom protocol registered.")
 
-        print(
-            "VitaSense protocol registered."
-        )
-
-
-    except Exception as e:
-
-        print(
-            "Could not register VitaSense protocol:"
-        )
-
-        print(e)
+    except OSError as error:
+        print("Could not register VitaSense protocol:", error)
 
 
 # ==========================================================
-# HANDLE VITASENSE PROTOCOL
+# HANDLE FATIGUE RESPONSE PROTOCOL
 # ==========================================================
 
-def handle_protocol_url(url):
+def handle_protocol_url(protocol_url):
+    parsed_url = urlparse(protocol_url)
 
-    # ------------------------------------------------------
-    # Validate protocol
-    # ------------------------------------------------------
-
-    if not url.startswith(
-        "vitasense://fatigue"
-    ):
-
+    if parsed_url.scheme.lower() != PROTOCOL_NAME.lower():
         return
 
-
-    # ------------------------------------------------------
-    # DETERMINE RESPONSE
-    # ------------------------------------------------------
-
-    if "response=healthy" in url:
-
-        response = "healthy"
-
-
-    elif "response=mild" in url:
-
-        response = "mild"
-
-
-    elif "response=high" in url:
-
-        response = "high"
-
-
-    else:
-
+    if parsed_url.netloc.lower() != "fatigue":
         return
 
+    query_parameters = parse_qs(parsed_url.query)
+    fatigue_level = query_parameters.get("response", [None])[0]
 
-    # ------------------------------------------------------
-    # GET CURRENT SESSION AGAIN
-    #
-    # Protocol opens a NEW Python process.
-    # Therefore we must query Flask again.
-    # ------------------------------------------------------
+    allowed_responses = {
+        "healthy",
+        "mild",
+        "high",
+    }
 
+    if fatigue_level not in allowed_responses:
+        print("Invalid fatigue response received.")
+        return
+
+    # The protocol opens a new process, so retrieve the active
+    # monitoring session again before saving the response.
     if not get_current_monitoring():
-
-        print(
-            "No active monitoring session."
-        )
-
+        print("No active monitoring session for fatigue response.")
         return
-
-
-    # ------------------------------------------------------
-    # IMPORTANT:
-    # NEVER SAVE FATIGUE RESPONSE IN AI MODE
-    # ------------------------------------------------------
 
     if current_mode != "DATA_COLLECTION":
-
-        print(
-            "Ignoring fatigue response."
-        )
-
-        print(
-            "Current monitoring mode:",
-            current_mode
-        )
-
+        print("Ignoring fatigue response outside Data Collection mode.")
         return
 
-
-    # ------------------------------------------------------
-    # SAVE RESPONSE
-    # ------------------------------------------------------
-
-    save_fatigue_response(
-        response
-    )
+    save_fatigue_response(fatigue_level)
 
 
 # ==========================================================
-# SHOW WINDOWS NOTIFICATION
+# SHOW DATA COLLECTION FATIGUE POPUP
 # ==========================================================
 
 def show_fatigue_notification():
-
-    toast = Notification(
-
-        app_id=(
-            "AI Digital Fatigue Monitoring"
-        ),
-
-        title="Fatigue Check",
-
-        msg=(
-            "How are you feeling right now?"
-        ),
-
-        duration="long"
-    )
-
-
-    # ------------------------------------------------------
-    # NOTIFICATION SOUND
-    # ------------------------------------------------------
-
-    toast.set_audio(
-        audio.Default,
-        loop=False
-    )
-
-
-    # ======================================================
-    # HEALTHY
-    # ======================================================
-
-    toast.add_actions(
-
-        label="Healthy",
-
-        launch=(
-            "vitasense://fatigue"
-            "?response=healthy"
+    try:
+        toast = Notification(
+            app_id=FATIGUE_APP_ID,
+            title="Fatigue Check",
+            msg="How are you feeling right now?",
+            duration="long",
         )
-    )
 
-
-    # ======================================================
-    # MILD
-    # ======================================================
-
-    toast.add_actions(
-
-        label="Mild",
-
-        launch=(
-            "vitasense://fatigue"
-            "?response=mild"
+        toast.set_audio(
+            audio.Default,
+            loop=False,
         )
-    )
 
-
-    # ======================================================
-    # HIGH FATIGUE
-    # ======================================================
-
-    toast.add_actions(
-
-        label="High Fatigue",
-
-        launch=(
-            "vitasense://fatigue"
-            "?response=high"
+        toast.add_actions(
+            label="Healthy",
+            launch=f"{PROTOCOL_NAME}://fatigue?response=healthy",
         )
-    )
 
+        toast.add_actions(
+            label="Mild",
+            launch=f"{PROTOCOL_NAME}://fatigue?response=mild",
+        )
 
-    # ------------------------------------------------------
-    # SHOW NOTIFICATION
-    # ------------------------------------------------------
+        toast.add_actions(
+            label="High Fatigue",
+            launch=f"{PROTOCOL_NAME}://fatigue?response=high",
+        )
 
-    toast.show()
+        toast.show()
+
+        print("Data Collection fatigue popup displayed.")
+        return True
+
+    except Exception as error:
+        print("Could not display fatigue popup:", error)
+        return False
 
 
 # ==========================================================
-# MAIN
+# MAIN AGENT
 # ==========================================================
 
-if __name__ == "__main__":
-
-
-    # ======================================================
-    # CHECK FOR PROTOCOL ACTIVATION FIRST
-    # ======================================================
-
-    if len(sys.argv) > 1:
-
-        protocol_url = sys.argv[1]
-
-        handle_protocol_url(
-            protocol_url
-        )
-
-        sys.exit(0)
-
-
-    # ======================================================
-    # NORMAL NOTIFICATION AGENT
-    # ======================================================
-
+def run_notification_agent():
     print()
     print("======================================")
-    print(" AI DIGITAL FATIGUE MONITORING")
-    print(" Native Windows Fatigue Notification")
+    print("VITASENSE DESKTOP NOTIFICATION AGENT")
     print("======================================")
+    print("Backend URL:", VITE_API_URL)
+    print("Development mode:", DEVELOPMENT_MODE)
+    print("Data Collection popup interval:", POPUP_INTERVAL)
+    print("AI recommendation polling interval:", NOTIFICATION_POLL_INTERVAL)
+    print("Monitoring status interval:", STATUS_CHECK_INTERVAL)
     print()
-
-
-    print(
-        "Backend URL:",
-        BACKEND_URL
-    )
-
-    print()
-
-
-    # ======================================================
-    # DISPLAY MODE
-    # ======================================================
-
-    if DEVELOPMENT_MODE:
-
-        print(
-            "MODE: DEVELOPMENT"
-        )
-
-        print(
-            "Popup interval:",
-            DEV_INTERVAL,
-            "seconds"
-        )
-
-    else:
-
-        print(
-            "MODE: PRODUCTION"
-        )
-
-        print(
-            "Popup interval:",
-            PRODUCTION_INTERVAL,
-            "seconds"
-        )
-
-
-    print()
-
-
-    # ======================================================
-    # REGISTER PROTOCOL
-    # ======================================================
 
     register_protocol()
 
+    print("Notification agent started.")
+    print("Waiting for an active monitoring session...")
     print()
 
+    last_status_check = 0
+    last_fatigue_popup = 0
+    last_recommendation_poll = 0
 
-    # ======================================================
-    # START NORMAL AGENT
-    # ======================================================
-
-    print(
-        "Notification agent started."
-    )
-
-    print(
-        "Waiting for active monitoring..."
-    )
-
-    print()
-
-
-    # ======================================================
-    # CONTINUOUS LOOP
-    # ======================================================
+    active_session_key = None
 
     try:
-
         while True:
+            current_time = time.monotonic()
 
-            # ------------------------------------------------
-            # CHECK ACTIVE MONITORING
-            # ------------------------------------------------
+            # ----------------------------------------------
+            # REFRESH MONITORING STATUS
+            # ----------------------------------------------
 
-            monitoring_active = (
-                get_current_monitoring()
-            )
+            if (
+                current_time - last_status_check
+                >= STATUS_CHECK_INTERVAL
+            ):
+                monitoring_active = get_current_monitoring()
+                last_status_check = time.monotonic()
 
-
-            # ------------------------------------------------
-            # SHOW POPUP ONLY IN DATA COLLECTION MODE
-            # ------------------------------------------------
-
-            if monitoring_active:
-
-                if current_mode == "DATA_COLLECTION":
-
-                    print(
-                        "Data Collection mode detected."
+                if monitoring_active:
+                    new_session_key = (
+                        current_user_id,
+                        current_session_id,
+                        current_mode,
                     )
 
-                    print(
-                        "Sending fatigue notification..."
-                    )
+                    if new_session_key != active_session_key:
+                        print(
+                            "Monitoring session changed:",
+                            new_session_key,
+                        )
 
-                    show_fatigue_notification()
-
-                    print(
-                        f"Next notification in "
-                        f"{POPUP_INTERVAL} seconds."
-                    )
-
-
-                elif current_mode == "AI_MONITORING":
-
-                    print(
-                        "AI Monitoring mode detected."
-                    )
-
-                    print(
-                        "Fatigue self-report popup skipped."
-                    )
-
+                        active_session_key = new_session_key
+                        last_fatigue_popup = 0
+                        last_recommendation_poll = 0
 
                 else:
+                    if active_session_key is not None:
+                        print("Monitoring session is no longer active.")
 
+                    active_session_key = None
+
+            # ----------------------------------------------
+            # DATA COLLECTION MODE
+            # ----------------------------------------------
+
+            if (
+                current_user_id is not None
+                and current_mode == "DATA_COLLECTION"
+            ):
+                current_time = time.monotonic()
+
+                if (
+                    current_time - last_fatigue_popup
+                    >= POPUP_INTERVAL
+                ):
+                    print("Data Collection mode: sending fatigue popup.")
+
+                    show_fatigue_notification()
+                    last_fatigue_popup = time.monotonic()
+
+            # ----------------------------------------------
+            # AI MONITORING MODE
+            # ----------------------------------------------
+
+            elif (
+                current_user_id is not None
+                and current_mode == "AI_MONITORING"
+            ):
+                current_time = time.monotonic()
+
+                if (
+                    current_time - last_recommendation_poll
+                    >= NOTIFICATION_POLL_INTERVAL
+                ):
                     print(
-                        f"Unknown monitoring mode: "
-                        f"{current_mode}"
+                        "AI Monitoring mode: checking recommendation notifications."
                     )
 
-                    print(
-                        "Fatigue popup skipped."
+                    recommendation_manager.check_new_notifications(
+                        current_user_id
                     )
 
+                    last_recommendation_poll = time.monotonic()
 
-            else:
-
-                print(
-                    "Popup skipped."
-                )
-
-                print(
-                    "Monitoring is not active."
-                )
-
-
-            # ------------------------------------------------
-            # WAIT BEFORE NEXT CHECK
-            # ------------------------------------------------
-
-            time.sleep(
-                POPUP_INTERVAL
-            )
-
+            time.sleep(LOOP_SLEEP_SECONDS)
 
     except KeyboardInterrupt:
-
         print()
+        print("VitaSense notification agent stopped.")
 
-        print(
-            "Notification agent stopped."
-        )
+
+# ==========================================================
+# ENTRY POINT
+# ==========================================================
+
+if __name__ == "__main__":
+    # Windows launches a new process when a user clicks one of
+    # the fatigue response buttons. Handle that URL and exit.
+    if len(sys.argv) > 1:
+        handle_protocol_url(sys.argv[1])
+        sys.exit(0)
+
+    run_notification_agent()

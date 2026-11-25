@@ -1,3 +1,4 @@
+
 import { Routes, Route, Navigate } from "react-router-dom";
 
 import { ToastContainer } from "react-toastify";
@@ -31,29 +32,18 @@ import Settings from "./pages/Settings";
 import CameraData from "./pages/CameraData/CameraData";
 import Notifications from "./pages/Notification/Notifications";
 
-
 function App() {
-
   return (
-
     <>
-
       <Routes>
-
-
-        {/* =====================================================
-            LANDING
-        ===================================================== */}
+        {/* LANDING */}
 
         <Route
           path="/"
           element={<LandingPage />}
         />
 
-
-        {/* =====================================================
-            AUTH
-        ===================================================== */}
+        {/* AUTH */}
 
         <Route
           path="/login"
@@ -65,10 +55,7 @@ function App() {
           element={<Register />}
         />
 
-
-        {/* =====================================================
-            PROTECTED MODE SELECTION
-        ===================================================== */}
+        {/* MODE SELECTION */}
 
         <Route
           path="/choose-mode"
@@ -79,10 +66,7 @@ function App() {
           }
         />
 
-
-        {/* =====================================================
-            PROTECTED MAIN APPLICATION
-        ===================================================== */}
+        {/* DASHBOARD */}
 
         <Route
           path="/dashboard"
@@ -95,6 +79,7 @@ function App() {
           }
         />
 
+        {/* ACTIVITY */}
 
         <Route
           path="/activity"
@@ -107,6 +92,7 @@ function App() {
           }
         />
 
+        {/* ENVIRONMENT */}
 
         <Route
           path="/environment"
@@ -119,6 +105,7 @@ function App() {
           }
         />
 
+        {/* FATIGUE PREDICTION */}
 
         <Route
           path="/fatigue-prediction"
@@ -131,14 +118,20 @@ function App() {
           }
         />
 
+        {/* CAMERA DATA */}
+
         <Route
           path="/camera-data"
           element={
-            <MainLayout>
-              <CameraData />
-            </MainLayout>
+            <ProtectedRoute>
+              <MainLayout>
+                <CameraData />
+              </MainLayout>
+            </ProtectedRoute>
           }
         />
+
+        {/* REPORTS */}
 
         <Route
           path="/reports"
@@ -151,6 +144,7 @@ function App() {
           }
         />
 
+        {/* HISTORY */}
 
         <Route
           path="/history"
@@ -168,6 +162,7 @@ function App() {
           element={<SessionDetails />}
         />
 
+        {/* RECOMMENDATIONS */}
 
         <Route
           path="/recommendations"
@@ -179,6 +174,9 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+        {/* NOTIFICATIONS */}
+
         <Route
           path="/notifications"
           element={
@@ -189,6 +187,8 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+        {/* PROFILE */}
 
         <Route
           path="/profile"
@@ -201,6 +201,7 @@ function App() {
           }
         />
 
+        {/* SETTINGS */}
 
         <Route
           path="/settings"
@@ -213,27 +214,13 @@ function App() {
           }
         />
 
-
-        {/* =====================================================
-            FALLBACK
-        ===================================================== */}
+        {/* FALLBACK */}
 
         <Route
           path="*"
-          element={
-            <Navigate
-              to="/"
-              replace
-            />
-          }
+          element={<Navigate to="/" replace />}
         />
-
       </Routes>
-
-
-      {/* =====================================================
-          TOAST NOTIFICATIONS
-      ===================================================== */}
 
       <ToastContainer
         position="top-right"
@@ -245,11 +232,8 @@ function App() {
         draggable
         theme="light"
       />
-
     </>
-
   );
-
 }
 
 export default App;

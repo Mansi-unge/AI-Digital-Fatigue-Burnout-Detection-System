@@ -2,6 +2,7 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -829,15 +830,14 @@ const History = () => {
   const [error, setError] =
     useState("");
 
-
+  const requestIdRef = useRef(0);
+  const hasLoadedRef = useRef(false);
 
   // ----------------------------------------------------------
   // LOAD HISTORY
   // ----------------------------------------------------------
-
   const loadHistory = useCallback(
     async (isRefresh = false) => {
-
       if (!userId) {
         setLoading(false);
         setError(
@@ -846,33 +846,33 @@ const History = () => {
         return;
       }
 
+      // Assign a unique ID to every request.
+      const currentRequestId = ++requestIdRef.current;
+
+      // Keep the existing page visible after initial loading.
+      if (hasLoadedRef.current || isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
+      setError("");
 
       try {
+        const response = await getMonitoringHistory({
+          userId,
+          mode: mode || undefined,
+          groupBy,
+          startDate: startDate || undefined,
+          endDate: endDate || undefined,
+        });
 
-        if (isRefresh) {
-          setRefreshing(true);
-        } else {
-          setLoading(true);
+        // Ignore outdated responses.
+        if (currentRequestId !== requestIdRef.current) {
+          return;
         }
 
-        setError("");
-
-
-        const response =
-          await getMonitoringHistory({
-            userId,
-            mode: mode || undefined,
-            groupBy,
-            startDate:
-              startDate || undefined,
-            endDate:
-              endDate || undefined,
-          });
-
-
-        const result =
-          response?.data;
-
+        const result = response?.data;
 
         if (!result?.success) {
           throw new Error(
@@ -881,16 +881,15 @@ const History = () => {
           );
         }
 
-
         setHistory(result);
+        hasLoadedRef.current = true;
 
       } catch (err) {
+        if (currentRequestId !== requestIdRef.current) {
+          return;
+        }
 
-        console.error(
-          "History loading error:",
-          err
-        );
-
+        console.error("History loading error:", err);
 
         setError(
           err?.response?.data?.message ||
@@ -899,12 +898,11 @@ const History = () => {
         );
 
       } finally {
-
-        setLoading(false);
-        setRefreshing(false);
-
+        if (currentRequestId === requestIdRef.current) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
-
     },
     [
       userId,
@@ -914,14 +912,21 @@ const History = () => {
       endDate,
     ]
   );
-
-
   // ----------------------------------------------------------
   // INITIAL LOAD + FILTER CHANGE
   // ----------------------------------------------------------
 
   useEffect(() => {
-    loadHistory();
+    const timer = setTimeout(() => {
+      loadHistory();
+    }, 300);
+
+    return () => {
+      clearTimeout(timer);
+
+      // Prevent an older request from updating the page.
+      requestIdRef.current += 1;
+    };
   }, [loadHistory]);
 
 
@@ -1766,7 +1771,12 @@ const History = () => {
 
           </div>
 
-
+          {refreshing && (
+            <div className="flex items-center gap-2 px-5 py-2 text-xs text-blue-600">
+              <RefreshCw size={13} className="animate-spin" />
+              Updating monitoring history...
+            </div>
+          )}
           {/* RESULTS BODY */}
 
           <div className="p-5">
@@ -1909,18 +1919,18 @@ const History = () => {
         </section>
 
       </div>
- {/* ==================================================
+      {/* ==================================================
         SESSION DETAILS MODAL
     ================================================== */}
 
-    {selectedSession && (
-      <SessionDetails
-        sessionId={selectedSession.session_id}
-        onClose={() => setSelectedSession(null)}
-      />
-    )}
+      {selectedSession && (
+        <SessionDetails
+          sessionId={selectedSession.session_id}
+          onClose={() => setSelectedSession(null)}
+        />
+      )}
     </div>
-    
+
   );
 };
 

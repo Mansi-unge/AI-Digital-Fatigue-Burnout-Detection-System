@@ -5,7 +5,12 @@ export const startMonitoring = (userId, mode = "DATA_COLLECTION") =>
 
 export const stopMonitoring = () => api.post("/monitoring/stop");
 
-export const getMonitoringStatus = () => api.get("/monitoring/status");
+export const getMonitoringStatus = (userId) =>
+  api.get("/monitoring/status", {
+    params: {
+      user_id: userId,
+    },
+  });
 
 export const getCurrentMonitoring = (userId) =>
   api.get("/monitoring/current", {
@@ -35,7 +40,7 @@ export const getLatestFatigue = (userId) =>
   api.get("/monitoring/fatigue/latest", { params: { user_id: userId } });
 
 export const cameraStreamUrl = () =>
-  `${import.meta.env.VITE_API_URL}/monitoring/camera/stream`;
+  `${api.defaults.baseURL.replace(/\/+$/, "")}/monitoring/camera/stream`;
 
 export const toggleCamera = (userId, enabled) =>
   api.post("/monitoring/camera/toggle", {
@@ -57,7 +62,14 @@ export const getCurrentRecommendations = (userId) =>
     },
   });
 
-
+// Get historical fatigue, burnout and health predictions
+export const getPredictionHistory = (userId) =>
+  api.get("/prediction/history", {
+    params: {
+      user_id: userId,
+    },
+  });
+  
 export const getMonitoringHistory = ({
   userId,
   mode,
@@ -83,3 +95,8 @@ export const getMonitoringSessionDetails = (userId, sessionId) =>
       user_id: userId,
     },
   });
+
+
+// Get real-time monitoring start/stop transition progress
+export const getMonitoringTransitionStatus = () =>
+  api.get("/monitoring/transition-status");

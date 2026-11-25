@@ -10,6 +10,7 @@ import {
   Bell,
   ShieldCheck,
   CheckCircle2,
+  RefreshCw,
   Save,
 } from "lucide-react";
 
@@ -94,7 +95,7 @@ const Settings = () => {
         if (!response?.success) {
           setError(
             response?.message ||
-              "Unable to load settings."
+            "Unable to load settings."
           );
           return;
         }
@@ -111,7 +112,7 @@ const Settings = () => {
 
         setError(
           err.response?.data?.message ||
-            "Unable to load settings."
+          "Unable to load settings."
         );
       } finally {
         setLoading(false);
@@ -162,7 +163,7 @@ const Settings = () => {
       if (!response?.success) {
         setError(
           response?.message ||
-            "Failed to save settings."
+          "Failed to save settings."
         );
         return;
       }
@@ -185,12 +186,13 @@ const Settings = () => {
 
       setError(
         err.response?.data?.message ||
-          "Unable to save settings."
+        "Unable to save settings."
       );
     } finally {
       setSaving(false);
     }
   };
+
 
   // ==========================================================
   // LOADING
@@ -198,21 +200,27 @@ const Settings = () => {
 
   if (loading) {
     return (
-      <div className="min-h-full bg-slate-50 px-6 py-6">
+      <div className="min-h-full bg-[#f5f7fb] p-5 sm:p-6 lg:p-8">
 
-        <div className="mx-auto max-w-[1200px]">
+        <div className="mx-auto flex min-h-[650px] max-w-[1600px] items-center justify-center">
 
-          <div className="flex min-h-[500px] items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="text-center">
 
-            <div className="text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm">
 
-              <div className="mx-auto h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-blue-600" />
-
-              <p className="mt-4 text-sm font-medium text-slate-500">
-                Loading settings...
-              </p>
+              <RefreshCw
+                className="h-7 w-7 animate-spin text-blue-600"
+              />
 
             </div>
+
+            <h2 className="mt-5 text-lg font-bold text-slate-800">
+              Loading Settings Workspace
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Loading your monitoring and notification preferences...
+            </p>
 
           </div>
 
@@ -779,16 +787,14 @@ const Toggle = ({
         focus:ring-2
         focus:ring-blue-200
 
-        ${
-          checked
-            ? "bg-blue-600"
-            : "bg-slate-200"
+        ${checked
+          ? "bg-blue-600"
+          : "bg-slate-200"
         }
 
-        ${
-          disabled
-            ? "cursor-not-allowed"
-            : "cursor-pointer"
+        ${disabled
+          ? "cursor-not-allowed"
+          : "cursor-pointer"
         }
       `}
     >
@@ -805,10 +811,9 @@ const Toggle = ({
           transition
           duration-200
 
-          ${
-            checked
-              ? "left-6"
-              : "left-1"
+          ${checked
+            ? "left-6"
+            : "left-1"
           }
         `}
       />

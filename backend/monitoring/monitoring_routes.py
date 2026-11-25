@@ -58,8 +58,16 @@ def generate_camera_frames():
 # SAVE FATIGUE SELF-REPORT
 # ==========================================================
 
+
+# ==========================================================
+# SAVE FATIGUE SELF-REPORT
+# ==========================================================
+
 @monitoring_bp.route("/fatigue", methods=["POST"])
 def save_fatigue():
+
+    db = SessionLocal()
+
     try:
         data = request.get_json(silent=True) or {}
 
@@ -67,28 +75,95 @@ def save_fatigue():
         session_id = data.get("session_id")
         level = data.get("level")
 
-        if user_id is None or level is None:
+        # --------------------------------------------------
+        # VALIDATE INPUT
+        # --------------------------------------------------
+
+        if not all([user_id, session_id, level]):
             return jsonify({
                 "success": False,
-                "message": "user_id and level are required"
+                "message": "user_id, session_id and level are required"
             }), 400
 
-        session_id = getattr(monitor_manager, "session_id", None)
+        try:
+            user_id = int(user_id)
+            session_id = int(session_id)
+        except (ValueError, TypeError):
+            return jsonify({
+                "success": False,
+                "message": "Invalid user_id or session_id"
+            }), 400
+
+        level = str(level).strip().lower()
+
+        if level not in ["healthy", "mild", "high"]:
+            return jsonify({
+                "success": False,
+                "message": "Invalid fatigue level"
+            }), 400
+
+        # --------------------------------------------------
+        # VALIDATE MONITORING SESSION
+        # --------------------------------------------------
+
+        session = (
+            db.query(MonitoringSession)
+            .filter(
+                MonitoringSession.id == session_id,
+                MonitoringSession.user_id == user_id,
+                MonitoringSession.is_active == True,
+                MonitoringSession.mode == "DATA_COLLECTION"
+            )
+            .first()
+        )
+
+        if session is None:
+            return jsonify({
+                "success": False,
+                "message": "No active Data Collection session found"
+            }), 400
+
+        # --------------------------------------------------
+        # SAVE FATIGUE RESPONSE
+        # --------------------------------------------------
 
         result = monitoring_service.save_fatigue_report(
             user_id=user_id,
             level=level,
-            session_id=session_id,
+            session_id=session_id
         )
 
-        if not result["success"]:
+        if not result.get("success"):
             return jsonify(result), 400
 
-        return jsonify(result), 200
+        print(
+            f"Fatigue response saved: "
+            f"user_id={user_id}, "
+            f"session_id={session_id}, "
+            f"level={level}"
+        )
+
+        return jsonify({
+            "success": True,
+            "message": "Fatigue response saved successfully",
+            "user_id": user_id,
+            "session_id": session_id,
+            "level": level
+        }), 200
 
     except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
 
+        db.rollback()
+
+        print("Fatigue self-report error:", str(e))
+
+        return jsonify({
+            "success": False,
+            "message": "Unable to save fatigue response"
+        }), 500
+
+    finally:
+        db.close()
 
 # ==========================================================
 # GET LATEST FATIGUE SELF-REPORT
@@ -118,27 +193,25 @@ def latest_fatigue():
 # LIVE CAMERA STREAM
 # ==========================================================
 
-@monitoring_bp.route(
-    "/camera/stream",
-    methods=["GET"]
-)
+@monitoring_bp.route("/camera/stream", methods=["GET"])
 def camera_stream():
 
     if not monitor_manager.is_running():
-
         return jsonify({
             "success": False,
             "message": "Monitoring is not running"
         }), 400
 
+    if not monitor_manager.camera_stream.is_running():
+        return jsonify({
+            "success": False,
+            "message": "Camera is disabled"
+        }), 400
+
     return Response(
         generate_camera_frames(),
-        mimetype=(
-            "multipart/x-mixed-replace; "
-            "boundary=frame"
-        )
+        mimetype="multipart/x-mixed-replace; boundary=frame"
     )
-
 
 
 
@@ -163,7 +236,7 @@ def toggle_camera():
         enabled = data.get("enabled")
 
         # ======================================================
-        # VALIDATE USER
+        # VALIDATE AND CONVERT USER ID
         # ======================================================
 
         if user_id is None:
@@ -171,6 +244,16 @@ def toggle_camera():
             return jsonify({
                 "success": False,
                 "message": "user_id is required"
+            }), 400
+
+        try:
+            user_id = int(user_id)
+
+        except (TypeError, ValueError):
+
+            return jsonify({
+                "success": False,
+                "message": "Invalid user ID"
             }), 400
 
         # ======================================================
@@ -227,17 +310,15 @@ def toggle_camera():
 
             "success": True,
 
-            "enabled":
-                result.get(
-                    "enabled",
-                    enabled
-                ),
+            "enabled": result.get(
+                "enabled",
+                enabled
+            ),
 
-            "message":
-                result.get(
-                    "message",
-                    "Camera setting updated."
-                )
+            "message": result.get(
+                "message",
+                "Camera setting updated."
+            )
 
         }), 200
 
@@ -252,11 +333,9 @@ def toggle_camera():
 
             "success": False,
 
-            "message":
-                "Unable to update camera status."
+            "message": "Unable to update camera status."
 
         }), 500
-
 
 # ==========================================================
 # START MONITORING
@@ -278,11 +357,28 @@ def start_monitoring():
 
         mode = data.get("mode")
 
+        # ------------------------------------------
+        # VALIDATE AND CONVERT USER ID
+        # ------------------------------------------
+
         if user_id is None:
             return jsonify({
                 "success": False,
                 "message": "user_id is required"
             }), 400
+
+        try:
+            user_id = int(user_id)
+
+        except (TypeError, ValueError):
+            return jsonify({
+                "success": False,
+                "message": "Invalid user ID"
+            }), 400
+
+        # ------------------------------------------
+        # VALIDATE MONITORING MODE
+        # ------------------------------------------
 
         if mode not in ["DATA_COLLECTION", "AI_MONITORING"]:
             return jsonify({
@@ -320,7 +416,6 @@ def start_monitoring():
         )
 
         if not result["success"]:
-
             return jsonify(result), 400
 
         session_id = result["session_id"]
@@ -334,30 +429,58 @@ def start_monitoring():
             session_id
         )
 
+        monitor_manager.start_transition()
+
+        try:
+            monitor_manager.start()
+
+        except Exception as start_error:
+
+            print("Monitoring startup failed:", str(start_error))
+
+            try:
+                monitor_manager.stop()
+            except Exception as cleanup_error:
+                print("Monitoring cleanup failed:", str(cleanup_error))
+
+            try:
+                monitoring_service.stop_monitoring(
+                    user_id=user_id
+                )
+            except Exception as session_error:
+                print("Session cleanup failed:", str(session_error))
+
+            monitor_manager.user_id = None
+            monitor_manager.session_id = None
+
+            monitor_manager.set_transition_phase(
+                "error",
+                message="Unable to start monitoring.",
+                error=str(start_error)
+            )
+
+            return jsonify({
+                "success": False,
+                "message": "Unable to start monitoring."
+            }), 500
+
         # ------------------------------------------
         # START MONITORS
         # ------------------------------------------
-
-        monitor_manager.start()
 
         return jsonify({
 
             "success": True,
 
-            "message":
-                "Monitoring started",
+            "message": "Monitoring started",
 
-            "user_id":
-                user_id,
+            "user_id": user_id,
 
-            "session_id":
-                session_id,
+            "session_id": session_id,
 
-            "mode":
-                result["mode"],
+            "mode": result["mode"],
 
-            "started_at":
-                result["started_at"]
+            "started_at": result["started_at"]
 
         }), 200
 
@@ -370,8 +493,6 @@ def start_monitoring():
             "message": str(e)
 
         }), 500
-
-
 
 # ==========================================================
 # IoT DATA
@@ -882,72 +1003,81 @@ def get_data_collection_progress():
 
 
 
-
 # ==========================================================
 # STOP MONITORING
 # ==========================================================
 
-@monitoring_bp.route(
-    "/stop",
-    methods=["POST"]
-)
+@monitoring_bp.route("/stop", methods=["POST"])
 def stop_monitoring():
 
     try:
-
         user_id = monitor_manager.user_id
 
-        if user_id is None:
-
+        if user_id is None or not monitor_manager.is_running():
             return jsonify({
                 "success": False,
-                "message": "No active monitoring user"
+                "message": "No active monitoring session."
             }), 400
-        
-        # ------------------------------------------
-        # STOP MONITORS
-        # ------------------------------------------
 
-        monitor_manager.stop()
+        monitor_manager.stop_transition()
 
-        # ------------------------------------------
-        # STOP DATABASE SESSION
-        # ------------------------------------------
+        # Stop monitors and save final activity snapshot.
+        stop_result = monitor_manager.stop()
 
-        result = (
-            monitoring_service
-            .stop_monitoring(
-                user_id=user_id
+        if not stop_result.get("success"):
+            monitor_manager.set_transition_phase(
+                "error",
+                message="Monitoring could not be stopped completely.",
+                error=stop_result.get("message")
             )
+
+            return jsonify(stop_result), 500
+
+        # Close the database session only after final save.
+        result = monitoring_service.stop_monitoring(
+            user_id=user_id
         )
 
+        if not result.get("success"):
+            monitor_manager.set_transition_phase(
+                "error",
+                message="Monitoring stopped, but the database session could not be closed.",
+                error=result.get("message")
+            )
 
-        # ------------------------------------------
-        # CLEAR MANAGER STATE
-        # ------------------------------------------
+            return jsonify(result), 500
 
+        monitor_manager.update_transition_step(
+            "close_session",
+            True,
+            "Monitoring session closed successfully."
+        )
+
+        monitor_manager.set_transition_phase(
+            "completed",
+            message="Monitoring stopped successfully."
+        )
+
+        # Clear user/session only after the transition is complete.
         monitor_manager.user_id = None
         monitor_manager.session_id = None
-
-        if not result["success"]:
-
-            return jsonify(result), 400
 
         return jsonify(result), 200
 
     except Exception as e:
 
+        print("Monitoring stop error:", str(e))
+
+        monitor_manager.set_transition_phase(
+            "error",
+            message="Unable to stop monitoring.",
+            error=str(e)
+        )
+
         return jsonify({
-
             "success": False,
-
-            "message": str(e)
-
+            "message": "Unable to stop monitoring."
         }), 500
-
-
-
-
 # ==========================================================
 # GET CURRENT MONITORING SESSION
 # ==========================================================
@@ -1019,18 +1149,36 @@ def get_current_monitoring():
         db.close()
 
 
+
+
 # ==========================================================
 # MONITORING STATUS
 # ==========================================================
-@monitoring_bp.route(
-    "/status",
-    methods=["GET"]
-)
+
+@monitoring_bp.route("/status", methods=["GET"])
 def monitoring_status():
 
     try:
+        # --------------------------------------------------
+        # CHECK WHETHER MONITORING IS RUNNING
+        # --------------------------------------------------
 
         running = monitor_manager.is_running()
+
+        if not running:
+            return jsonify({
+                "success": True,
+                "running": False,
+                "user_id": None,
+                "session_id": None,
+                "mode": None,
+                "started_at": None,
+                "ended_at": None
+            }), 200
+
+        # --------------------------------------------------
+        # GET ACTIVE SESSION FROM MONITOR MANAGER
+        # --------------------------------------------------
 
         user_id = monitor_manager.user_id
 
@@ -1040,55 +1188,92 @@ def monitoring_status():
             None
         )
 
-        mode = None
+        if user_id is None or session_id is None:
+            return jsonify({
+                "success": True,
+                "running": False,
+                "user_id": None,
+                "session_id": None,
+                "mode": None,
+                "started_at": None,
+                "ended_at": None
+            }), 200
 
-        # ======================================================
-        # GET MODE FROM CURRENT DATABASE SESSION
-        # ======================================================
+        # --------------------------------------------------
+        # GET SESSION DETAILS FROM DATABASE
+        # --------------------------------------------------
 
-        if running and session_id is not None:
+        db = SessionLocal()
 
-            db = SessionLocal()
-
-            try:
-                session = (
-                    db.query(MonitoringSession)
-                    .filter(
-                        MonitoringSession.id == session_id
-                    )
-                    .first()
+        try:
+            session = (
+                db.query(MonitoringSession)
+                .filter(
+                    MonitoringSession.id == session_id,
+                    MonitoringSession.user_id == user_id,
+                    MonitoringSession.is_active == True
                 )
+                .first()
+            )
 
-                if session:
-                    mode = session.mode
+            if session is None:
+                return jsonify({
+                    "success": True,
+                    "running": False,
+                    "user_id": None,
+                    "session_id": None,
+                    "mode": None,
+                    "started_at": None,
+                    "ended_at": None
+                }), 200
 
-            finally:
-                db.close()
+            return jsonify({
+                "success": True,
+                "running": True,
+                "user_id": user_id,
+                "session_id": session.id,
+                "mode": session.mode,
+                "started_at": (
+                    session.started_at.isoformat()
+                    if session.started_at else None
+                ),
+                "ended_at": (
+                    session.ended_at.isoformat()
+                    if session.ended_at else None
+                )
+            }), 200
 
-        # ======================================================
-        # RESPONSE
-        # ======================================================
-
-        return jsonify({
-
-            "success": True,
-
-            "running": running,
-
-            "user_id": user_id,
-
-            "session_id": session_id,
-
-            "mode": mode
-
-        }), 200
+        finally:
+            db.close()
 
     except Exception as e:
 
+        print("Monitoring status error:", str(e))
+
         return jsonify({
-
             "success": False,
+            "message": "Unable to retrieve monitoring status"
+        }), 500
 
-            "message": str(e)
 
+
+# ==========================================================
+# GET REAL MONITORING TRANSITION STATUS
+# ==========================================================
+
+@monitoring_bp.route("/transition-status", methods=["GET"])
+def get_transition_status():
+
+    try:
+        return jsonify({
+            "success": True,
+            **monitor_manager.get_transition_status()
+        }), 200
+
+    except Exception as e:
+        print("Transition status error:", str(e))
+
+        return jsonify({
+            "success": False,
+            "message": "Unable to retrieve transition status."
         }), 500

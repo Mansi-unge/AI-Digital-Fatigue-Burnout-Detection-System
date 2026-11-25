@@ -69,6 +69,12 @@ class MonitorManager:
         self.activity_thread = None
         self.activity_logging = False
 
+        # Prevent simultaneous database activity saves
+        self.activity_save_lock = threading.Lock()
+
+        # Allows the activity logger to stop immediately
+        self.activity_stop_event = threading.Event()
+
         # ==========================================
         # LATEST CAMERA DATA
         # ==========================================
@@ -98,7 +104,22 @@ class MonitorManager:
         # ==========================================
 
         self.running = False
+            # ==========================================
+        # REAL MONITORING TRANSITION STATUS
+        # ==========================================
 
+        self.transition_lock = threading.Lock()
+
+        self.transition_status = {
+            "phase": "idle",
+            "steps": {},
+            "message": "",
+            "updated_at": None,
+            "error": None
+        }
+
+        self.camera_frame_received = False
+        self.camera_ai_frame_processed = False
     # ==========================================================
     # SET CURRENT USER
     # ==========================================================
@@ -110,15 +131,165 @@ class MonitorManager:
         with self.iot_lock:
             self.iot_last_received_at = None
             self.iot_last_received_monotonic = None
+        # ==========================================================
+    # REAL TRANSITION STATUS
+    # ==========================================================
 
+    # ==========================================================
+    # REAL MONITORING TRANSITION STATUS
+    # ==========================================================
 
+    def start_transition(self):
+        from datetime import datetime, timezone
+
+        with self.transition_lock:
+            self.transition_status = {
+                "phase": "starting",
+                "steps": {
+                    "desktop": {"status": "pending", "message": "Waiting for desktop monitors."},
+                    "iot": {"status": "pending", "message": "Waiting for the first valid ESP32 packet."},
+                    "camera_ai": {"status": "pending", "message": "Waiting for a camera frame and AI processing."},
+                    "session": {"status": "pending", "message": "Waiting for the database session to become active."}
+                },
+                "message": "Starting monitoring...",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "error": None
+            }
+
+        self.camera_frame_received = False
+        self.camera_ai_frame_processed = False
+
+    def stop_transition(self):
+        from datetime import datetime, timezone
+
+        with self.transition_lock:
+            self.transition_status = {
+                "phase": "stopping",
+                "steps": {
+                    "save_data": {"status": "pending", "message": "Waiting to save the final activity snapshot."},
+                    "stop_camera_ai": {"status": "pending", "message": "Waiting to stop camera AI and its stream."},
+                    "stop_desktop": {"status": "pending", "message": "Waiting to stop desktop monitors."},
+                    "stop_iot": {"status": "pending", "message": "Waiting to stop the ESP32 listener."},
+                    "close_session": {"status": "pending", "message": "Waiting for the database session to close."}
+                },
+                "message": "Stopping monitoring...",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "error": None
+            }
+
+    def update_transition_step(self, step, status, message=None):
+        """
+        Update one transition step.
+
+        `status` accepts: pending, in_progress, completed, skipped, error.
+        For compatibility with older call sites, True maps to completed
+        and False maps to pending.
+        """
+        from datetime import datetime, timezone
+
+        if isinstance(status, bool):
+            status = "completed" if status else "pending"
+
+        allowed_statuses = {
+            "pending", "in_progress", "completed", "skipped", "error"
+        }
+        if status not in allowed_statuses:
+            status = "error"
+
+        with self.transition_lock:
+            steps = self.transition_status.get("steps", {})
+            if step not in steps:
+                return
+
+            existing = steps[step]
+            if not isinstance(existing, dict):
+                existing = {"status": "pending", "message": ""}
+
+            existing["status"] = status
+            if message is not None:
+                existing["message"] = str(message)
+
+            steps[step] = existing
+            if message is not None:
+                self.transition_status["message"] = str(message)
+
+            self.transition_status["updated_at"] = (
+                datetime.now(timezone.utc).isoformat()
+            )
+
+    def set_transition_phase(self, phase, message=None, error=None):
+        from datetime import datetime, timezone
+
+        with self.transition_lock:
+            self.transition_status["phase"] = phase
+
+            if message is not None:
+                self.transition_status["message"] = message
+
+            self.transition_status["error"] = error
+            self.transition_status["updated_at"] = (
+                datetime.now(timezone.utc).isoformat()
+            )
+
+    def get_transition_status(self):
+        with self.transition_lock:
+            return {
+                "phase": self.transition_status["phase"],
+                "steps": {
+                    key: dict(value) if isinstance(value, dict) else {
+                        "status": "completed" if value else "pending",
+                        "message": ""
+                    }
+                    for key, value in self.transition_status["steps"].items()
+                },
+                "message": self.transition_status["message"],
+                "updated_at": self.transition_status["updated_at"],
+                "error": self.transition_status["error"]
+            }
+
+    # ==========================================================
+    # CHECK ACTUAL DESKTOP MONITOR STATUS
+    # ==========================================================
+
+    def get_desktop_monitor_status(self):
+
+        settings = self.get_user_settings()
+
+        if settings is None:
+            return False
+
+        setting_mapping = [
+            ("keyboard_monitoring", self.keyboard),
+            ("mouse_monitoring", self.mouse),
+            ("screen_monitoring", self.screen),
+            ("idle_monitoring", self.idle),
+            ("application_monitoring", self.application)
+        ]
+
+        for setting_name, monitor in setting_mapping:
+
+            if settings.get(setting_name, False):
+
+                if not getattr(monitor, "running", False):
+                    return False
+
+        return True
+        
     def mark_iot_data_received(self):
-        """Mark the exact moment a valid ESP32 packet reached the backend."""
+        """Record a valid ESP32 packet received by the backend."""
+
         from datetime import datetime, timezone
 
         with self.iot_lock:
             self.iot_last_received_at = datetime.now(timezone.utc)
             self.iot_last_received_monotonic = time.monotonic()
+
+        if self.running:
+            self.update_transition_step(
+                "iot",
+                "completed",
+                "ESP32 sensor data received successfully."
+            )
 
     def get_iot_status(self):
         """Return true IoT connectivity based on the last ESP32 packet."""
@@ -364,6 +535,12 @@ class MonitorManager:
 
         else:
 
+            self.update_transition_step(
+                "camera_ai",
+                "skipped",
+                "Camera AI is disabled in monitoring settings."
+            )
+
             # ----------------------------------------------
             # STOP CAMERA PROCESSING
             # ----------------------------------------------
@@ -373,7 +550,10 @@ class MonitorManager:
             if self.camera_thread is not None:
 
                 self.camera_thread.join(timeout=2)
-
+                if self.camera_thread.is_alive():
+                    raise RuntimeError(
+                        "Camera processing thread did not stop."
+                    )
                 self.camera_thread = None
 
             # ----------------------------------------------
@@ -549,10 +729,11 @@ class MonitorManager:
 
                 if self.camera_thread is not None:
 
-                    self.camera_thread.join(
-                        timeout=2
-                    )
-
+                    self.camera_thread.join(timeout=5)
+                    if self.camera_thread.is_alive():
+                        raise RuntimeError(
+                            "Camera processing thread did not stop."
+                        )
                     self.camera_thread = None
 
                 self.camera.reset()
@@ -614,10 +795,13 @@ class MonitorManager:
 
         if self.camera_thread is not None:
 
-            self.camera_thread.join(
-                timeout=2
-            )
-
+            self.camera_thread.join(timeout=5)
+            if self.camera_thread.is_alive():
+                return {
+                    "success": False,
+                    "enabled": True,
+                    "message": "Camera processing thread did not stop."
+                }
             self.camera_thread = None
 
         # ----------------------------------------------
@@ -679,7 +863,8 @@ class MonitorManager:
 
         self.running = True
 
-
+        self.camera_frame_received = False
+        self.camera_ai_frame_processed = False
         # ==========================================
         # DESKTOP
         # ==========================================
@@ -690,6 +875,14 @@ class MonitorManager:
         # self.idle.start()
         # self.application.start()
         self.apply_settings()
+
+        desktop_ok = self.get_desktop_monitor_status()
+        self.update_transition_step(
+            "desktop",
+            "completed" if desktop_ok else "error",
+            "Desktop monitors are running." if desktop_ok
+            else "One or more enabled desktop monitors did not start."
+        )
 
         # ==========================================
         # IoT
@@ -708,6 +901,7 @@ class MonitorManager:
         # START ACTIVITY DATABASE LOGGER
         # ==========================================
 
+        self.activity_stop_event.clear()
         self.activity_logging = True
 
         self.activity_thread = threading.Thread(
@@ -725,6 +919,9 @@ class MonitorManager:
     # ==========================================================
     # CAMERA PROCESSING LOOP
     # ==========================================================
+    # ==========================================================
+    # CAMERA PROCESSING LOOP
+    # ==========================================================
 
     def _camera_processing_loop(self):
 
@@ -735,23 +932,29 @@ class MonitorManager:
             try:
 
                 # --------------------------------------
-                # GET FRAME FROM CAMERA STREAM
+                # GET REAL CAMERA FRAME
                 # --------------------------------------
 
                 frame = self.camera_stream.read_frame()
 
                 if frame is None:
-
                     time.sleep(0.03)
-
                     continue
+
+                self.camera_frame_received = True
 
                 # --------------------------------------
                 # PROCESS FRAME WITH AI
                 # --------------------------------------
 
-                camera_data = self.camera.process_frame(
-                    frame
+                camera_data = self.camera.process_frame(frame)
+
+                self.camera_ai_frame_processed = True
+
+                self.update_transition_step(
+                    "camera_ai",
+                    "completed",
+                    "Camera frame received and AI processing completed."
                 )
 
                 # --------------------------------------
@@ -759,18 +962,10 @@ class MonitorManager:
                 # --------------------------------------
 
                 if camera_data is None:
-
                     camera_data = {}
 
                 with self.camera_data_lock:
-
-                    self.latest_camera_data = dict(
-                        camera_data
-                    )
-
-                # --------------------------------------
-                # SMALL DELAY
-                # --------------------------------------
+                    self.latest_camera_data = dict(camera_data)
 
                 time.sleep(0.03)
 
@@ -784,187 +979,100 @@ class MonitorManager:
                 time.sleep(0.1)
 
         print("AI Camera processing thread stopped.")
+    
+    def _save_activity_snapshot(self, force=False):
 
-   
-# ==========================================================
-# ACTIVITY DATABASE LOGGING LOOP
-# ==========================================================
+        with self.activity_save_lock:
 
-    def _activity_logging_loop(self):
-
-        print("Activity database logging thread started.")
-
-        while self.activity_logging:
+            if self.activity_stop_event.is_set() and not force:
+                return False
 
             try:
-
-                # ------------------------------------------
-                # GET CURRENT MONITORING DATA
-                # ------------------------------------------
-
                 data = self.get_data()
-
-                # ------------------------------------------
-                # CHECK USER / SESSION
-                # ------------------------------------------
 
                 if (
                     data.get("user_id") is None
                     or data.get("session_id") is None
                 ):
-
-                    print(
-                        "Activity logging skipped: "
-                        "no active user/session."
-                    )
-
-                    time.sleep(1)
-                    continue
-
-                # ------------------------------------------
-                # SAVE TO DATABASE
-                # ------------------------------------------
+                    print("Activity save skipped: no active session.")
+                    return False
 
                 result = self.monitoring_service.save_activity(
-
                     user_id=data["user_id"],
-
                     session_id=data["session_id"],
 
-                    # DESKTOP
-                    screen_time=data.get(
-                        "screen_time",
-                        0
-                    ),
+                    screen_time=data.get("screen_time", 0),
+                    active_time=data.get("active_time", 0),
+                    idle_time=data.get("idle_time", 0),
 
-                    active_time=data.get(
-                        "active_time",
-                        0
-                    ),
-
-                    idle_time=data.get(
-                        "idle_time",
-                        0
-                    ),
-
-                    keyboard_count=data.get(
-                        "keyboard_count",
-                        0
-                    ),
-
-                    mouse_clicks=data.get(
-                        "mouse_clicks",
-                        0
-                    ),
-
-                    scroll_count=data.get(
-                        "scroll_count",
-                        0
-                    ),
+                    keyboard_count=data.get("keyboard_count", 0),
+                    mouse_clicks=data.get("mouse_clicks", 0),
+                    scroll_count=data.get("scroll_count", 0),
 
                     active_application=data.get(
-                        "active_application",
-                        "Unknown"
+                        "active_application", "Unknown"
                     ),
-
                     application_switches=data.get(
-                        "application_switches",
-                        0
+                        "application_switches", 0
                     ),
 
-                    # CAMERA
-                    blink_rate=data.get(
-                        "blink_rate",
-                        0
-                    ),
+                    blink_rate=data.get("blink_rate", 0),
+                    eye_closure=data.get("eye_closure", 0),
+                    yawn_count=data.get("yawn_count", 0),
+                    head_pose=data.get("head_pose", "UNKNOWN"),
 
-                    eye_closure=data.get(
-                        "eye_closure",
-                        0
-                    ),
-
-                    yawn_count=data.get(
-                        "yawn_count",
-                        0
-                    ),
-
-                    head_pose=data.get(
-                        "head_pose",
-                        "UNKNOWN"
-                    ),
-
-                    # SYSTEM
-                    brightness=data.get(
-                        "brightness",
-                        50
-                    ),
-
+                    brightness=data.get("brightness", 50),
                     battery_percentage=data.get(
-                        "battery_percentage",
-                        100
+                        "battery_percentage", 100
                     ),
+                    charging_status=data.get("charging_status", False),
 
-                    charging_status=data.get(
-                        "charging_status",
-                        False
-                    ),
-
-                    # IoT
-                    temperature=data.get(
-                        "temperature"
-                    ),
-
-                    humidity=data.get(
-                        "humidity"
-                    ),
-
-                    light=data.get(
-                        "light"
-                    ),
-
-                    distance=data.get(
-                        "distance"
-                    ),
-
-                    motion=data.get(
-                        "motion"
-                    )
+                    temperature=data.get("temperature"),
+                    humidity=data.get("humidity"),
+                    light=data.get("light"),
+                    distance=data.get("distance"),
+                    motion=data.get("motion")
                 )
 
-                # ------------------------------------------
-                # PRINT RESULT
-                # ------------------------------------------
-
-                if result.get("success"):
-
-                    print(
-                        "Activity saved successfully | "
-                        f"session={data['session_id']} | "
-                        f"activity={result.get('activity_id')}"
-                    )
-
-                else:
-
+                if not isinstance(result, dict) or not result.get("success"):
                     print(
                         "Activity save failed:",
-                        result.get("message")
+                        result.get("message") if isinstance(result, dict)
+                        else "Invalid save response"
                     )
-
-            except Exception as e:
+                    return False
 
                 print(
-                    "Activity logging error:",
-                    str(e)
+                    "Activity saved successfully | "
+                    f"session={data['session_id']} | "
+                    f"activity={result.get('activity_id')}"
                 )
 
-            # ------------------------------------------
-            # SAVE EVERY 10 SECONDS
-            # ------------------------------------------
+                return True
 
-            time.sleep(10)
+            except Exception as e:
+                print("Activity snapshot error:", str(e))
+                return False
+        
+        
+    # ==========================================================
+    # ACTIVITY DATABASE LOGGING LOOP
+    # ==========================================================
+
+    def _activity_logging_loop(self):
+
+        print("Activity database logging thread started.")
+
+        while not self.activity_stop_event.is_set():
+
+            # Save one regular activity snapshot
+            self._save_activity_snapshot()
+
+            # Wait 10 seconds, but wake immediately on shutdown
+            if self.activity_stop_event.wait(10):
+                break
 
         print("Activity database logging thread stopped.")
-
     # ==========================================================
     # GET LATEST CAMERA DATA
     # ==========================================================
@@ -1277,100 +1385,190 @@ class MonitorManager:
     # ==========================================================
 
     def stop(self):
+        """
+        Stop all monitoring components and return a structured result.
 
+        IMPORTANT:
+        Do not clear self.session_id here. The Flask /monitoring/stop route
+        still needs it to close the database MonitoringSession after the
+        final activity snapshot has been saved.
+        """
         if not self.running:
+            message = "Monitor Manager is not running."
+            print(message)
+            return {
+                "success": False,
+                "message": message,
+                "errors": [message]
+            }
 
-            print(
-                "Monitor Manager is not running."
-            )
-
-            return
-        # ==========================================
-        # STOP ACTIVITY DATABASE LOGGER
-        # ==========================================
-
-        self.activity_logging = False
-
-        if self.activity_thread is not None:
-
-            self.activity_thread.join(
-                timeout=2
-            )
-
-            self.activity_thread = None
         print()
         print("================================")
         print("Stopping all monitors...")
         print("================================")
 
-        # ==========================================
-        # STOP CAMERA PROCESSING FIRST
-        # ==========================================
+        errors = []
 
-        self.camera_processing = False
+        # 1. Stop new periodic logger iterations and wait for any current save.
+        self.activity_logging = False
+        self.activity_stop_event.set()
 
-        if self.camera_thread is not None:
+        if self.activity_thread is not None:
+            self.activity_thread.join(timeout=15)
+            if self.activity_thread.is_alive():
+                errors.append("Activity logger thread did not stop.")
+            else:
+                self.activity_thread = None
 
-            self.camera_thread.join(
-                timeout=2
+        # 2. Save the final snapshot while the camera and other data sources
+        #    are still available. Do not mark the step completed on failure.
+        self.update_transition_step(
+            "save_data", "in_progress", "Saving the final activity snapshot."
+        )
+        print("Saving final activity snapshot...")
+        snapshot_saved = self._save_activity_snapshot(force=True)
+
+        if snapshot_saved:
+            self.update_transition_step(
+                "save_data", "completed",
+                "Final activity snapshot saved successfully."
+            )
+        else:
+            errors.append("Final activity snapshot could not be saved.")
+            self.update_transition_step(
+                "save_data", "error",
+                "Final activity snapshot could not be saved."
             )
 
-            self.camera_thread = None
+        # 3. Stop the AI processing thread before releasing camera resources.
+        self.update_transition_step(
+            "stop_camera_ai", "in_progress",
+            "Stopping camera AI processing and camera stream."
+        )
+        self.camera_processing = False
 
-        # ==========================================
-        # DESKTOP
-        # ==========================================
+        camera_thread_stopped = True
+        if self.camera_thread is not None:
+            self.camera_thread.join(timeout=5)
+            camera_thread_stopped = not self.camera_thread.is_alive()
+            if camera_thread_stopped:
+                self.camera_thread = None
+            else:
+                errors.append("Camera processing thread did not stop.")
 
-        self.keyboard.stop()
-        self.mouse.stop()
-        self.screen.stop()
-        self.idle.stop()
-        self.application.stop()
+        if camera_thread_stopped:
+            try:
+                self.camera.close()
+                self.camera_stream.stop()
+                with self.camera_data_lock:
+                    self.latest_camera_data = {}
+                self.update_transition_step(
+                    "stop_camera_ai", "completed",
+                    "Camera AI processing and stream stopped."
+                )
+            except Exception as exc:
+                errors.append(f"Camera shutdown failed: {exc}")
+                self.update_transition_step(
+                    "stop_camera_ai", "error",
+                    f"Camera shutdown failed: {exc}"
+                )
+        else:
+            self.update_transition_step(
+                "stop_camera_ai", "error",
+                "Camera processing thread is still running; camera resources were not released."
+            )
 
-        # ==========================================
-        # CAMERA AI
-        # ==========================================
+        # 4. Stop desktop monitors and verify their running flags.
+        self.update_transition_step(
+            "stop_desktop", "in_progress", "Stopping desktop monitors."
+        )
+        desktop_stop_errors = []
+        for name, monitor in (
+            ("keyboard", self.keyboard),
+            ("mouse", self.mouse),
+            ("screen", self.screen),
+            ("idle", self.idle),
+            ("application", self.application),
+        ):
+            try:
+                monitor.stop()
+                if getattr(monitor, "running", False):
+                    desktop_stop_errors.append(f"{name} monitor is still running.")
+            except Exception as exc:
+                desktop_stop_errors.append(f"{name} monitor stop failed: {exc}")
 
-        self.camera.close()
+        if desktop_stop_errors:
+            errors.extend(desktop_stop_errors)
+            self.update_transition_step(
+                "stop_desktop", "error", " ".join(desktop_stop_errors)
+            )
+        else:
+            self.update_transition_step(
+                "stop_desktop", "completed", "All desktop monitors stopped."
+            )
 
-        # ==========================================
-        # CAMERA STREAM
-        # ==========================================
+        # 5. Stop IoT and system monitors.
+        self.update_transition_step(
+            "stop_iot", "in_progress", "Stopping the ESP32 listener."
+        )
+        try:
+            self.iot.stop()
+            iot_running = (
+                self.iot.is_running()
+                if callable(getattr(self.iot, "is_running", None))
+                else bool(getattr(self.iot, "running", False))
+            )
+            if iot_running:
+                raise RuntimeError("IoT monitor is still running.")
 
-        self.camera_stream.stop()
+            self.update_transition_step(
+                "stop_iot", "completed", "ESP32 listener stopped."
+            )
+        except Exception as exc:
+            errors.append(f"IoT shutdown failed: {exc}")
+            self.update_transition_step(
+                "stop_iot", "error", f"IoT shutdown failed: {exc}"
+            )
 
-        # ==========================================
-        # IoT
-        # ==========================================
+        for monitor_name, monitor in (
+            ("brightness", self.brightness),
+            ("battery", self.battery),
+        ):
+            try:
+                monitor.stop()
+            except Exception as exc:
+                errors.append(f"{monitor_name} monitor stop failed: {exc}")
 
-        self.iot.stop()
-
-        # ==========================================
-        # SYSTEM
-        # ==========================================
-
-        self.brightness.stop()
-        self.battery.stop()
-
-        # ==========================================
-        # CLEAR CAMERA DATA
-        # ==========================================
-
-        with self.camera_data_lock:
-
-            self.latest_camera_data = {}
-
-        # ==========================================
-        # MANAGER STATUS
-        # ==========================================
-
+        # Keep the session_id intact for the Flask route to close the DB row.
         self.running = False
-        self.session_id = None
+
+        if errors:
+            message = "Monitoring stopped with one or more errors."
+            self.set_transition_phase(
+                "error", message=message, error="; ".join(errors)
+            )
+            print(message)
+            for error in errors:
+                print("STOP ERROR:", error)
+            return {
+                "success": False,
+                "message": message,
+                "errors": errors
+            }
+
+        message = "All monitoring components stopped successfully."
+        self.set_transition_phase("stopped", message=message, error=None)
 
         print()
         print("================================")
         print("All monitors stopped")
         print("================================")
+
+        return {
+            "success": True,
+            "message": message,
+            "errors": []
+        }
 
     # ==========================================================
     # STATUS

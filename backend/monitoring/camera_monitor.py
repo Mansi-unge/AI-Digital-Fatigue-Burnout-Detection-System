@@ -176,7 +176,7 @@ class CameraMonitor:
         )
 
         eye_closure = (
-            self.blink_monitor.get_eye_closure_duration()
+            self.blink_monitor.get_eye_closure_percentage()
         )
 
         yawn_count = (

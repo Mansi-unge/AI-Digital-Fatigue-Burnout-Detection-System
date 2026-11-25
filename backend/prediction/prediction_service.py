@@ -1,3 +1,5 @@
+
+from sqlalchemy import func
 from backend.database.database import SessionLocal
 from backend.database.models.activity import Activity
 from backend.database.models.monitoring_sessions import MonitoringSession
@@ -67,70 +69,47 @@ class PredictionService:
     # GET CURRENT AI MONITORING PREDICTION
     # ==========================================================
 
+
     def get_current_prediction(self, user_id):
 
         db = SessionLocal()
 
         try:
-
-            # --------------------------------------------------
-            # FIND ACTIVE SESSION
-            # --------------------------------------------------
-
             session = (
                 db.query(MonitoringSession)
                 .filter(
                     MonitoringSession.user_id == user_id,
-                    MonitoringSession.is_active == True
+                    MonitoringSession.is_active.is_(True)
                 )
                 .order_by(MonitoringSession.started_at.desc())
                 .first()
             )
 
-            # --------------------------------------------------
-            # NO ACTIVE SESSION
-            # --------------------------------------------------
-
             if session is None:
-
                 return {
                     "success": True,
                     "has_prediction": False,
                     "message": "No active monitoring session"
                 }
 
-            # --------------------------------------------------
-            # ONLY AI MONITORING
-            # --------------------------------------------------
-
             if session.mode != "AI_MONITORING":
-
                 return {
                     "success": True,
                     "has_prediction": False,
-                    "message": "Burnout prediction is available only in AI Monitoring mode"
+                    "message": (
+                        "Burnout prediction is available only "
+                        "in AI Monitoring mode"
+                    )
                 }
 
-            # --------------------------------------------------
-            # GET ACTIVITY RECORDS FOR CURRENT SESSION
-            # --------------------------------------------------
-
-            activities = (
-                db.query(Activity)
-                .filter(
-                    Activity.user_id == user_id,
-                    Activity.session_id == session.id
-                )
-                .order_by(Activity.created_at.asc())
-                .all()
+            activity_query = db.query(Activity).filter(
+                Activity.user_id == user_id,
+                Activity.session_id == session.id
             )
 
-            # --------------------------------------------------
-            # NOT ENOUGH DATA
-            # --------------------------------------------------
+            records_used = activity_query.count()
 
-            if not activities:
-
+            if records_used == 0:
                 return {
                     "success": True,
                     "has_prediction": False,
@@ -139,37 +118,95 @@ class PredictionService:
                     "records_used": 0
                 }
 
-            # --------------------------------------------------
-            # AGGREGATE ACTIVITY DATA
-            # --------------------------------------------------
-
-            activity_data = self._aggregate_activities(
-                activities
+            # Fetch only the latest snapshot.
+            latest = (
+                activity_query
+                .order_by(
+                    Activity.created_at.desc(),
+                    Activity.id.desc()
+                )
+                .first()
             )
 
-            # --------------------------------------------------
-            # GENERATE PREDICTION
-            # --------------------------------------------------
-
-            prediction = self.predict(
-                activity_data
+            # Calculate environment averages in PostgreSQL.
+            environment = (
+                db.query(
+                    func.avg(Activity.temperature),
+                    func.avg(Activity.humidity),
+                    func.avg(Activity.light),
+                    func.avg(Activity.brightness),
+                    func.avg(Activity.battery_percentage)
+                )
+                .filter(
+                    Activity.user_id == user_id,
+                    Activity.session_id == session.id
+                )
+                .one()
             )
 
-            # --------------------------------------------------
-            # RESPONSE
-            # --------------------------------------------------
+            # Find the most frequently recorded head pose.
+            dominant_pose = (
+                db.query(
+                    Activity.head_pose,
+                    func.count(Activity.id).label("pose_count")
+                )
+                .filter(
+                    Activity.user_id == user_id,
+                    Activity.session_id == session.id
+                )
+                .group_by(Activity.head_pose)
+                .order_by(
+                    func.count(Activity.id).desc(),
+                    Activity.head_pose.asc()
+                )
+                .first()
+            )
+
+            activity_data = {
+                # Latest desktop counters
+                "screen_time": float(latest.screen_time or 0),
+                "active_time": float(latest.active_time or 0),
+                "idle_time": float(latest.idle_time or 0),
+                "work_duration": float(latest.active_time or 0),
+                "break_duration": float(latest.idle_time or 0),
+
+                "keyboard_count": int(latest.keyboard_count or 0),
+                "mouse_clicks": int(latest.mouse_clicks or 0),
+                "scroll_count": int(latest.scroll_count or 0),
+                "application_switches": int(
+                    latest.application_switches or 0
+                ),
+
+                # Latest camera measurements
+                "blink_rate": float(latest.blink_rate or 0),
+                "eye_closure": float(latest.eye_closure or 0),
+                "yawn_count": int(latest.yawn_count or 0),
+                "head_pose": (
+                    dominant_pose[0]
+                    if dominant_pose and dominant_pose[0]
+                    else "UNKNOWN"
+                ),
+
+                # Environment averages
+                "temperature": float(environment[0] or 0),
+                "humidity": float(environment[1] or 0),
+                "light": float(environment[2] or 0),
+                "brightness": float(environment[3] or 0),
+                "battery_percentage": float(environment[4] or 0),
+            }
+
+            prediction = self.predict(activity_data)
 
             return {
                 "success": True,
                 "has_prediction": True,
                 "session_id": session.id,
-                "records_used": len(activities),
+                "records_used": records_used,
                 "prediction": prediction,
                 "features": activity_data
             }
 
         except Exception as e:
-
             print(
                 "PredictionService current prediction error:",
                 str(e)
@@ -181,7 +218,116 @@ class PredictionService:
             }
 
         finally:
+            db.close()
 
+    
+    def get_prediction_history(self, user_id):
+        db = SessionLocal()
+
+        try:
+            # Get the latest AI Monitoring session
+            session = (
+                db.query(MonitoringSession)
+                .filter(
+                    MonitoringSession.user_id == user_id,
+                    MonitoringSession.mode == "AI_MONITORING"
+                )
+                .order_by(
+                    MonitoringSession.started_at.desc()
+                )
+                .first()
+            )
+
+            if session is None:
+                return {
+                    "success": True,
+                    "has_history": False,
+                    "data": []
+                }
+
+            # Get actual saved activity snapshots
+            activities = (
+                db.query(Activity)
+                .filter(
+                    Activity.user_id == user_id,
+                    Activity.session_id == session.id
+                )
+                .order_by(
+                    Activity.created_at.asc(),
+                    Activity.id.asc()
+                )
+                .all()
+            )
+
+            records = []
+
+            for activity in activities:
+
+                activity_data = {
+                    "screen_time": activity.screen_time or 0,
+                    "active_time": activity.active_time or 0,
+                    "idle_time": activity.idle_time or 0,
+                    "keyboard_count": activity.keyboard_count or 0,
+                    "mouse_clicks": activity.mouse_clicks or 0,
+                    "scroll_count": activity.scroll_count or 0,
+                    "application_switches": (
+                        activity.application_switches or 0
+                    ),
+                    "blink_rate": activity.blink_rate or 0,
+                    "eye_closure": activity.eye_closure or 0,
+                    "yawn_count": activity.yawn_count or 0,
+                    "head_pose": activity.head_pose or "UNKNOWN",
+                    "temperature": activity.temperature,
+                    "humidity": activity.humidity,
+                    "light": activity.light,
+                    "distance": activity.distance,
+                    "motion": activity.motion,
+                    "brightness": activity.brightness or 0,
+                    "battery_percentage": (
+                        activity.battery_percentage
+                        if activity.battery_percentage is not None
+                        else 0
+                    ),
+                    "charging_status": bool(
+                        activity.charging_status
+                    )
+                }
+
+                prediction = self.predict(activity_data)
+
+                records.append({
+                    "activity_id": activity.id,
+                    "session_id": activity.session_id,
+                    "timestamp": (
+                        activity.created_at.isoformat()
+                        if activity.created_at
+                        else None
+                    ),
+                    "fatigue": prediction["fatigue"],
+                    "burnout": prediction["burnout"],
+                    "health": prediction["health"]
+                })
+
+            return {
+                "success": True,
+                "has_history": len(records) > 0,
+                "session_id": session.id,
+                "records_used": len(records),
+                "data": records
+            }
+
+        except Exception as e:
+            print(
+                "PredictionService history error:",
+                str(e)
+            )
+
+            return {
+                "success": False,
+                "message": str(e)
+            }
+
+        finally:
             db.close()
 
     # ==========================================================
@@ -241,39 +387,12 @@ class PredictionService:
         # Average them across the session.
         # ==========================================================
 
-        blink_values = [
-            float(a.blink_rate)
-            for a in activities
-            if a.blink_rate is not None
-        ]
+        blink_rate = float(latest.blink_rate or 0)
 
-        eye_closure_values = [
-            float(a.eye_closure)
-            for a in activities
-            if a.eye_closure is not None
-        ]
+        eye_closure = float(latest.eye_closure or 0)
 
-        blink_rate = (
-            sum(blink_values) / len(blink_values)
-            if blink_values
-            else 0
-        )
+        yawn_count = int(latest.yawn_count or 0)
 
-        eye_closure = (
-            sum(eye_closure_values) / len(eye_closure_values)
-            if eye_closure_values
-            else 0
-        )
-
-        # ==========================================================
-        # YAWN
-        # Count occurrences over the session.
-        # ==========================================================
-
-        yawn_count = sum(
-            int(a.yawn_count or 0)
-            for a in activities
-        )
 
         # ==========================================================
         # HEAD POSE

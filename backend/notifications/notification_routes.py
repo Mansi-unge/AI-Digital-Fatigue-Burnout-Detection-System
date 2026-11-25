@@ -1,3 +1,4 @@
+
 from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
 
@@ -13,6 +14,29 @@ notification_bp = Blueprint(
 
 
 # ==========================================================
+# DELETE SEEN NOTIFICATIONS AFTER 1 HOUR
+# ==========================================================
+
+def delete_expired_notifications(db):
+    cutoff_time = datetime.utcnow() - timedelta(hours=1)
+
+    deleted_count = (
+        db.query(Notification)
+        .filter(
+            Notification.is_seen == True,
+            Notification.seen_at.isnot(None),
+            Notification.seen_at < cutoff_time
+        )
+        .delete(synchronize_session=False)
+    )
+
+    if deleted_count > 0:
+        db.commit()
+
+    return deleted_count
+
+
+# ==========================================================
 # GET ALL NOTIFICATIONS
 # ==========================================================
 
@@ -21,10 +45,7 @@ def get_notifications():
     db = SessionLocal()
 
     try:
-        user_id = request.args.get(
-            "user_id",
-            type=int
-        )
+        user_id = request.args.get("user_id", type=int)
 
         if user_id is None:
             return jsonify({
@@ -32,8 +53,10 @@ def get_notifications():
                 "message": "user_id is required"
             }), 400
 
-       
-        cutoff_time = datetime.utcnow() - timedelta(hours=24)
+        # Delete notifications seen more than one hour ago
+        delete_expired_notifications(db)
+
+        cutoff_time = datetime.utcnow() - timedelta(hours=1)
 
         notifications = (
             db.query(Notification)
@@ -59,25 +82,30 @@ def get_notifications():
                 {
                     "id": notification.id,
                     "user_id": notification.user_id,
-                    "recommendation_id": (
-                        notification.recommendation_id
-                    ),
+                    "recommendation_id": notification.recommendation_id,
                     "title": notification.title,
                     "message": notification.message,
                     "type": notification.type,
                     "priority": notification.priority,
                     "is_seen": notification.is_seen,
+                    "seen_at": (
+                        notification.seen_at.isoformat()
+                        if notification.seen_at
+                        else None
+                    ),
                     "created_at": (
                         notification.created_at.isoformat()
                         if notification.created_at
                         else None
-                    ),
+                    )
                 }
                 for notification in notifications
             ]
         }), 200
 
     except Exception as e:
+        db.rollback()
+
         return jsonify({
             "success": False,
             "message": str(e)
@@ -96,10 +124,7 @@ def get_unread_notifications():
     db = SessionLocal()
 
     try:
-        user_id = request.args.get(
-            "user_id",
-            type=int
-        )
+        user_id = request.args.get("user_id", type=int)
 
         if user_id is None:
             return jsonify({
@@ -107,19 +132,16 @@ def get_unread_notifications():
                 "message": "user_id is required"
             }), 400
 
-        cutoff_time = (
-            datetime.utcnow()
-            - timedelta(hours=24)
-        )
+        # Clean up expired seen notifications
+        delete_expired_notifications(db)
+
         notifications = (
             db.query(Notification)
             .filter(
                 Notification.user_id == user_id,
                 Notification.is_seen == False
             )
-            .order_by(
-                Notification.created_at.desc()
-            )
+            .order_by(Notification.created_at.desc())
             .all()
         )
 
@@ -129,25 +151,31 @@ def get_unread_notifications():
             "notifications": [
                 {
                     "id": notification.id,
-                    "recommendation_id": (
-                        notification.recommendation_id
-                    ),
+                    "user_id": notification.user_id,
+                    "recommendation_id": notification.recommendation_id,
                     "title": notification.title,
                     "message": notification.message,
                     "type": notification.type,
                     "priority": notification.priority,
                     "is_seen": notification.is_seen,
+                    "seen_at": (
+                        notification.seen_at.isoformat()
+                        if notification.seen_at
+                        else None
+                    ),
                     "created_at": (
                         notification.created_at.isoformat()
                         if notification.created_at
                         else None
-                    ),
+                    )
                 }
                 for notification in notifications
             ]
         }), 200
 
     except Exception as e:
+        db.rollback()
+
         return jsonify({
             "success": False,
             "message": str(e)
@@ -169,10 +197,7 @@ def mark_notification_seen(notification_id):
     db = SessionLocal()
 
     try:
-        user_id = request.args.get(
-            "user_id",
-            type=int
-        )
+        user_id = request.args.get("user_id", type=int)
 
         if user_id is None:
             return jsonify({
@@ -195,15 +220,23 @@ def mark_notification_seen(notification_id):
                 "message": "Notification not found"
             }), 404
 
-        notification.is_seen = True
-        notification.seen_at = datetime.utcnow()
+        # Set seen timestamp only the first time
+        if not notification.is_seen:
+            notification.is_seen = True
+            notification.seen_at = datetime.utcnow()
 
-        db.commit()
+            db.commit()
 
         return jsonify({
             "success": True,
             "message": "Notification marked as seen",
-            "notification_id": notification.id
+            "notification_id": notification.id,
+            "is_seen": notification.is_seen,
+            "seen_at": (
+                notification.seen_at.isoformat()
+                if notification.seen_at
+                else None
+            )
         }), 200
 
     except Exception as e:
@@ -230,10 +263,7 @@ def mark_all_notifications_seen():
     db = SessionLocal()
 
     try:
-        user_id = request.args.get(
-            "user_id",
-            type=int
-        )
+        user_id = request.args.get("user_id", type=int)
 
         if user_id is None:
             return jsonify({
@@ -250,9 +280,11 @@ def mark_all_notifications_seen():
             .all()
         )
 
+        current_time = datetime.utcnow()
+
         for notification in notifications:
             notification.is_seen = True
-            notification.seen_at = datetime.utcnow()
+            notification.seen_at = current_time
 
         db.commit()
 

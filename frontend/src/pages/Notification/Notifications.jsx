@@ -1,4 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import {
   Bell,
@@ -87,120 +92,110 @@ const Notifications = () => {
   // LOAD NOTIFICATIONS
   // ==========================================================
 
-  const loadNotifications = async (showLoader = true) => {
+  const loadNotifications = useCallback(
+    async (showLoader = true, showError = true) => {
+      if (!userId) return;
 
-    if (!userId) {
-      return;
-    }
+      try {
+        if (showLoader) {
+          setLoading(true);
+        }
 
-    try {
+        setRefreshing(true);
 
-      if (showLoader) {
-        setLoading(true);
-      }
+        if (showError) {
+          setError("");
+        }
 
-      setRefreshing(true);
+        const response = await getNotifications(userId);
 
-      setError("");
-
-      const response = await getNotifications(userId);
-
-      if (response.data?.success) {
-
-        setNotifications(
-          response.data.notifications ?? []
+        if (response.data?.success) {
+          setNotifications(
+            response.data.notifications ?? []
+          );
+        } else if (showError) {
+          setError(
+            response.data?.message ||
+            "Unable to load notifications."
+          );
+        }
+      } catch (error) {
+        console.error(
+          "Failed to load notifications:",
+          error.response?.data || error.message
         );
 
-      } else {
-
-        setError(
-          response.data?.message ||
-          "Unable to load notifications."
-        );
+        if (showError) {
+          setError(
+            error.response?.data?.message ||
+            "Failed to load notifications."
+          );
+        }
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-
-    } catch (error) {
-
-      console.error(
-        "Failed to load notifications:",
-        error.response?.data || error.message
-      );
-
-      setError(
-        error.response?.data?.message ||
-        "Failed to load notifications."
-      );
-
-    } finally {
-
-      setLoading(false);
-
-      setRefreshing(false);
-    }
-  };
-
+    },
+    [userId]
+  );
 
   // ==========================================================
   // LOAD WHEN USER IS AVAILABLE
   // ==========================================================
-
   useEffect(() => {
+    if (!userId) return;
 
-    if (userId) {
+    // Initial notification loading
+    loadNotifications();
 
-      loadNotifications();
+    // Automatically refresh every 60 seconds
+    const interval = setInterval(() => {
+      loadNotifications(false, false);
+    }, 60000);
 
-    }
-
-  }, [userId]);
-
-
+    return () => {
+      clearInterval(interval);
+    };
+  }, [userId, loadNotifications]);
   // ==========================================================
   // MARK ONE AS SEEN
   // ==========================================================
 
-  const handleMarkSeen = async (notificationId) => {
 
-    if (!userId) {
-      return;
-    }
+  const handleMarkSeen = async (notificationId) => {
+    if (!userId) return;
 
     try {
-
       setMarkingId(notificationId);
 
-      const response =
-        await markNotificationSeen(
-          notificationId,
-          userId
-        );
+      const response = await markNotificationSeen(
+        notificationId,
+        userId
+      );
 
       if (response.data?.success) {
-
         setNotifications((current) =>
           current.map((notification) =>
             notification.id === notificationId
               ? {
-                  ...notification,
-                  is_seen: true,
-                }
+                ...notification,
+                is_seen: true,
+                seen_at: response.data.seen_at,
+              }
               : notification
           )
         );
       }
-
     } catch (error) {
-
       console.error(
         "Failed to mark notification as seen:",
         error.response?.data || error.message
       );
-
     } finally {
-
       setMarkingId(null);
     }
   };
+
 
 
   // ==========================================================
@@ -208,39 +203,32 @@ const Notifications = () => {
   // ==========================================================
 
   const handleMarkAllSeen = async () => {
-
-    if (!userId) {
-      return;
-    }
+    if (!userId) return;
 
     try {
-
       setMarkingAll(true);
 
-      const response =
-        await markAllNotificationsSeen(
-          userId
-        );
+      const response = await markAllNotificationsSeen(userId);
 
       if (response.data?.success) {
+        const seenAt = new Date().toISOString();
 
         setNotifications((current) =>
           current.map((notification) => ({
             ...notification,
             is_seen: true,
+            seen_at: notification.is_seen
+              ? notification.seen_at
+              : seenAt,
           }))
         );
       }
-
     } catch (error) {
-
       console.error(
         "Failed to mark all notifications as seen:",
         error.response?.data || error.message
       );
-
     } finally {
-
       setMarkingAll(false);
     }
   };
@@ -441,82 +429,34 @@ const Notifications = () => {
     }
   };
 
-
   // ==========================================================
   // LOADING
   // ==========================================================
 
   if (loading) {
-
     return (
+      <div className="min-h-full bg-[#f5f7fb] p-5 sm:p-6 lg:p-8">
+        <div className="mx-auto flex min-h-[650px] max-w-[1600px] items-center justify-center">
+          <div className="text-center">
 
-      <div className="
-        min-h-full
-        w-full
-        bg-slate-50
-      ">
-
-        <div className="
-          mx-auto
-          w-full
-          max-w-[1800px]
-          px-5
-          py-6
-          sm:px-7
-          lg:px-8
-        ">
-
-          <div className="
-            flex
-            min-h-[60vh]
-            items-center
-            justify-center
-          ">
-
-            <div className="
-              flex
-              flex-col
-              items-center
-            ">
-
-              <div className="
-                flex
-                h-12
-                w-12
-                items-center
-                justify-center
-                rounded-2xl
-                bg-blue-50
-                text-blue-600
-              ">
-
-                <Loader2
-                  size={24}
-                  className="animate-spin"
-                />
-
-              </div>
-
-              <p className="
-                mt-4
-                text-sm
-                font-medium
-                text-slate-500
-              ">
-                Loading notifications...
-              </p>
-
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <RefreshCw className="h-7 w-7 animate-spin text-blue-600" />
             </div>
 
+            <h2 className="mt-5 text-lg font-bold text-slate-800">
+              Loading Notifications Workspace
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Loading your latest alerts and recommendations...
+            </p>
+
           </div>
-
         </div>
-
       </div>
     );
   }
-
-
+  
   // ==========================================================
   // ERROR
   // ==========================================================
@@ -899,10 +839,9 @@ const Notifications = () => {
                     text-base
                     font-bold
                     leading-5
-                    ${
-                      unreadCount > 0
-                        ? "text-red-500"
-                        : "text-slate-900"
+                    ${unreadCount > 0
+                      ? "text-red-500"
+                      : "text-slate-900"
                     }
                   `}>
                     {unreadCount}
@@ -1196,10 +1135,9 @@ const Notifications = () => {
                       last:border-b-0
                       sm:px-5
                       sm:py-5
-                      ${
-                        notification.is_seen
-                          ? "bg-white hover:bg-slate-50/70"
-                          : "bg-blue-50/30 hover:bg-blue-50/60"
+                      ${notification.is_seen
+                        ? "bg-white hover:bg-slate-50/70"
+                        : "bg-blue-50/30 hover:bg-blue-50/60"
                       }
                     `}
                   >
@@ -1489,7 +1427,7 @@ const Notifications = () => {
                             >
 
                               {markingId ===
-                              notification.id ? (
+                                notification.id ? (
 
                                 <Loader2
                                   size={14}
@@ -1529,26 +1467,20 @@ const Notifications = () => {
             FOOTNOTE
         ====================================================== */}
 
-        {notifications.length > 0 && (
+        <div className="
+  mt-4
+  flex
+  items-center
+  justify-center
+  gap-2
+  text-xs
+  text-slate-400
+">
+          <Clock3 size={13} />
 
-          <div className="
-            mt-4
-            flex
-            items-center
-            justify-center
-            gap-2
-            text-xs
-            text-slate-400
-          ">
-
-            <Clock3 size={13} />
-
-            Notifications are automatically removed
-            from this view after 12 hours.
-
-          </div>
-
-        )}
+          Seen notifications are removed after 1 hour.
+          Unread notifications remain until marked as seen.
+        </div>
 
       </div>
 

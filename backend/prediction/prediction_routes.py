@@ -88,3 +88,50 @@ def current_prediction():
             "success": False,
             "message": str(e)
         }), 500
+
+
+# ==========================================
+# GET FATIGUE + BURNOUT + HEALTH HISTORY
+# ==========================================
+
+@prediction_bp.route(
+    "/history",
+    methods=["GET"]
+)
+def prediction_history():
+
+    try:
+
+        user_id = request.args.get(
+            "user_id",
+            type=int
+        )
+
+        if user_id is None:
+
+            return jsonify({
+                "success": False,
+                "message": "user_id is required"
+            }), 400
+
+        result = prediction_service.get_prediction_history(
+            user_id=user_id
+        )
+
+        if not result["success"]:
+
+            return jsonify(result), 500
+
+        return jsonify(result), 200
+
+    except Exception as e:
+
+        print(
+            "Prediction history route error:",
+            str(e)
+        )
+
+        return jsonify({
+            "success": False,
+            "message": "Unable to load prediction history."
+        }), 500

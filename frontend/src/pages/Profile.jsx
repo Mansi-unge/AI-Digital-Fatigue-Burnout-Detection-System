@@ -14,6 +14,7 @@ import {
   Fingerprint,
   Activity,
   LockKeyhole,
+  RefreshCw,
   CheckCircle2,
 } from "lucide-react";
 
@@ -182,27 +183,36 @@ const Profile = () => {
 
   if (loading) {
     return (
-      <div className="min-h-full bg-slate-50 px-6 py-6 lg:px-8">
-        <div className="mx-auto max-w-[1500px]">
+      <div className="min-h-full bg-[#f5f7fb] p-5 sm:p-6 lg:p-8">
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-12 shadow-sm">
+        <div className="mx-auto flex min-h-[650px] max-w-[1600px] items-center justify-center">
 
-            <div className="flex flex-col items-center justify-center py-16">
+          <div className="text-center">
 
-              <div className="h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-blue-600" />
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm">
 
-              <p className="mt-4 text-sm font-medium text-slate-500">
-                Loading profile...
-              </p>
+              <RefreshCw
+                className="h-7 w-7 animate-spin text-blue-600"
+              />
 
             </div>
+
+            <h2 className="mt-5 text-lg font-bold text-slate-800">
+              Loading Profile Workspace
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Loading your personal information and account details...
+            </p>
 
           </div>
 
         </div>
+
       </div>
     );
   }
+
 
   // ==========================================================
   // ERROR

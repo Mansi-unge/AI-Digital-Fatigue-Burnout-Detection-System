@@ -8,16 +8,16 @@
 // WIFI
 // =====================================================
 
-// const char* WIFI_SSID = "Mansiunge";
-// const char* WIFI_PASSWORD = "987654321";
-const char* WIFI_SSID = "vivo 1901";
-const char* WIFI_PASSWORD = "sanjayunge";
+const char* WIFI_SSID = "Unge Mansi";
+const char* WIFI_PASSWORD = "mansi1453";
+// const char* WIFI_SSID = "vivo 1901";
+// const char* WIFI_PASSWORD = "sanjayunge";
 // const char* WIFI_SSID = "Redmi 9";
 // const char* WIFI_PASSWORD = "shiu1234";
 // const char* WIFI_SSID = "moto g67 power 5G_1804";
-// const char* WIFI_PASSWORD = "12345678";
+// const char* WIFI_PASSWORD = "12345678"; 
 // Laptop IPv4 address
-const char* serverUrl = "http://192.168.82.156:5000/monitoring/iot-data";
+const char* serverUrl = "http://10.123.24.156:5000/monitoring/iot-data";
 
 
 // =====================================================
@@ -56,12 +56,46 @@ DHT dht(DHTPIN, DHTTYPE);
 // CONNECT TO WIFI
 // =====================================================
 
+
 void connectWiFi()
 {
     Serial.println();
     Serial.println("==============================");
     Serial.println("Connecting to Wi-Fi...");
     Serial.println("==============================");
+
+    WiFi.mode(WIFI_STA);
+    WiFi.disconnect();
+    delay(1000);
+
+    Serial.println("Scanning available networks...");
+
+    int networks = WiFi.scanNetworks();
+
+    if (networks == 0)
+    {
+        Serial.println("No Wi-Fi networks found!");
+    }
+    else
+    {
+        for (int i = 0; i < networks; i++)
+        {
+            Serial.print("Network: ");
+            Serial.print(WiFi.SSID(i));
+
+            Serial.print(" | Signal: ");
+            Serial.print(WiFi.RSSI(i));
+
+            Serial.print(" dBm | Security: ");
+            Serial.println(WiFi.encryptionType(i));
+        }
+    }
+
+    WiFi.scanDelete();
+
+    Serial.println();
+    Serial.print("Connecting to: ");
+    Serial.println(WIFI_SSID);
 
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
@@ -78,17 +112,22 @@ void connectWiFi()
 
     if (WiFi.status() == WL_CONNECTED)
     {
-        Serial.println("Connected!");
+        Serial.println("Wi-Fi Connected!");
 
-        Serial.print("IP Address: ");
+        Serial.print("ESP32 IP: ");
         Serial.println(WiFi.localIP());
+
+        Serial.print("Gateway: ");
+        Serial.println(WiFi.gatewayIP());
     }
     else
     {
         Serial.println("Wi-Fi Connection Failed!");
+
+        Serial.print("Wi-Fi Status Code: ");
+        Serial.println(WiFi.status());
     }
 }
-
 
 // =====================================================
 // BH1750 INITIALIZATION

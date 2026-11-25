@@ -52,7 +52,7 @@ export const timeAgo = (isoString) => {
 
 // DATA_COLLECTION_TARGET: how many activity records count as "100% collected".
 // Adjust this single constant once you know the exact number you need.
-export const DATA_COLLECTION_TARGET = 3000;
+export const DATA_COLLECTION_TARGET = 5000;
 
 export const computeCollectionProgress = (recordCount = 0, target = DATA_COLLECTION_TARGET) => {
   if (!recordCount) return 0;

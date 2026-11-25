@@ -31,8 +31,10 @@ const OverviewBanner = ({
   // MODE
   // ==========================================================
 
-  const isDataCollection = mode === "data_collection";
-  const isAI = mode === "ai_monitoring";
+  const normalizedMode = String(mode || "").toLowerCase();
+
+  const isDataCollection = normalizedMode === "data_collection";
+  const isAI = normalizedMode === "ai_monitoring";
   const displayName = user?.name || "User";
 
   // ==========================================================

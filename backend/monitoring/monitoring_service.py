@@ -1,12 +1,12 @@
 from datetime import datetime
-
+from sqlalchemy import func
 from backend.database.database import SessionLocal
 from backend.database.models.users import User
 from backend.database.models.activity import Activity
 from backend.database.models.monitoring_sessions import MonitoringSession
 from backend.database.models.fatigue_reports import FatigueReport
 from backend.prediction.prediction_service import PredictionService
-
+from backend.recommendations.recommendation_service import RecommendationService
 class MonitoringService:
 
     # ==========================================================
@@ -583,21 +583,74 @@ class MonitoringService:
 
             db.add(activity)
 
-            # Update last successful synchronization time
             active_session.last_sync_at = datetime.utcnow()
 
             db.commit()
             db.refresh(activity)
 
-            # ==========================================
-            # SUCCESS
-            # ==========================================
+            # ==========================================================
+            # AUTOMATIC RECOMMENDATION GENERATION
+            # ONLY FOR AI MONITORING MODE
+            # ==========================================================
+
+            generated_recommendations = []
+
+            if active_session.mode == "AI_MONITORING":
+
+                try:
+                    # ------------------------------------------
+                    # GENERATE CURRENT PREDICTION
+                    # ------------------------------------------
+
+                    prediction_service = PredictionService()
+
+                    prediction_result = (
+                        prediction_service.get_current_prediction(user_id)
+                    )
+
+                    # ------------------------------------------
+                    # GENERATE RECOMMENDATIONS
+                    # ------------------------------------------
+
+                    if (
+                        prediction_result.get("success")
+                        and prediction_result.get("has_prediction")
+                    ):
+
+                        recommendation_service = RecommendationService()
+
+                        generated_recommendations = (
+                            recommendation_service.generate_recommendations(
+                                prediction_result,
+                                user_id
+                            )
+                        )
+
+                        print(
+                            "Automatic recommendations generated:",
+                            len(generated_recommendations)
+                        )
+
+                except Exception as recommendation_error:
+
+                    # Activity is already committed.
+                    # Recommendation failure must not affect activity saving.
+
+                    print(
+                        "Automatic recommendation generation error:",
+                        str(recommendation_error)
+                    )
+
+            # ==========================================================
+            # SUCCESS RESPONSE
+            # ==========================================================
 
             return {
                 "success": True,
                 "message": "Activity saved successfully",
                 "activity_id": activity.id,
                 "session_id": activity.session_id,
+                "recommendations_generated": len(generated_recommendations),
             }
 
         except Exception as e:
@@ -769,7 +822,7 @@ class MonitoringService:
 
 
     # ==========================================================
-    # GET MONITORING HISTORY
+    # GET MONITORING HISTORY - OPTIMIZED
     # ==========================================================
 
     def get_monitoring_history(
@@ -780,626 +833,375 @@ class MonitoringService:
         start_date=None,
         end_date=None
     ):
+        from datetime import timedelta
+
         db = SessionLocal()
 
         try:
+            # --------------------------------------------------
+            # VALIDATE INPUTS
+            # --------------------------------------------------
 
-            # ======================================================
-            # VALIDATE GROUPING
-            # ======================================================
-
-            allowed_groupings = {
-                "session",
-                "day",
-                "month"
-            }
+            allowed_groupings = {"session", "day", "month"}
+            allowed_modes = {"AI_MONITORING", "DATA_COLLECTION"}
 
             if group_by not in allowed_groupings:
                 return {
                     "success": False,
-                    "message": (
-                        "Invalid group_by. "
-                        "Use session, day, or month."
-                    )
+                    "message": "Invalid group_by. Use session, day, or month."
                 }
-
-            # ======================================================
-            # VALIDATE MODE
-            # ======================================================
-
-            allowed_modes = {
-                "AI_MONITORING",
-                "DATA_COLLECTION"
-            }
 
             if mode is not None and mode not in allowed_modes:
                 return {
                     "success": False,
-                    "message": (
-                        "Invalid mode. "
-                        "Use AI_MONITORING or DATA_COLLECTION."
-                    )
+                    "message": "Invalid mode. Use AI_MONITORING or DATA_COLLECTION."
                 }
 
-            # ======================================================
+            # --------------------------------------------------
             # BUILD SESSION QUERY
-            # ======================================================
+            # --------------------------------------------------
 
-            query = (
-                db.query(MonitoringSession)
-                .filter(
-                    MonitoringSession.user_id == user_id
-                )
+            query = db.query(MonitoringSession).filter(
+                MonitoringSession.user_id == user_id
             )
-
-            # ======================================================
-            # MODE FILTER
-            # ======================================================
 
             if mode is not None:
                 query = query.filter(
                     MonitoringSession.mode == mode
                 )
 
-            # ======================================================
-            # DATE FILTER
-            #
-            # We filter using started_at.
-            # ======================================================
-
-            parsed_start_date = None
-            parsed_end_date = None
-
             if start_date:
-
                 try:
-                    parsed_start_date = datetime.strptime(
-                        start_date,
-                        "%Y-%m-%d"
+                    parsed_start = datetime.strptime(
+                        start_date, "%Y-%m-%d"
                     )
                 except ValueError:
-
                     return {
                         "success": False,
-                        "message": (
-                            "Invalid start_date format. "
-                            "Use YYYY-MM-DD."
-                        )
+                        "message": "Invalid start_date format. Use YYYY-MM-DD."
                     }
 
                 query = query.filter(
-                    MonitoringSession.started_at
-                    >= parsed_start_date
+                    MonitoringSession.started_at >= parsed_start
                 )
 
             if end_date:
-
                 try:
-                    parsed_end_date = datetime.strptime(
-                        end_date,
-                        "%Y-%m-%d"
+                    parsed_end = datetime.strptime(
+                        end_date, "%Y-%m-%d"
                     )
                 except ValueError:
-
                     return {
                         "success": False,
-                        "message": (
-                            "Invalid end_date format. "
-                            "Use YYYY-MM-DD."
-                        )
+                        "message": "Invalid end_date format. Use YYYY-MM-DD."
                     }
 
-                # Include the complete end date.
-                from datetime import timedelta
-
-                parsed_end_date_exclusive = (
-                    parsed_end_date + timedelta(days=1)
-                )
-
                 query = query.filter(
-                    MonitoringSession.started_at
-                    < parsed_end_date_exclusive
+                    MonitoringSession.started_at < (
+                        parsed_end + timedelta(days=1)
+                    )
                 )
-
-            # ======================================================
-            # FETCH SESSIONS
-            # ======================================================
 
             sessions = (
                 query
-                .order_by(
-                    MonitoringSession.started_at.desc()
-                )
+                .order_by(MonitoringSession.started_at.desc())
                 .all()
             )
 
-            # ======================================================
-            # PREPARE SESSION DATA
-            # ======================================================
+            # --------------------------------------------------
+            # PREPARE SESSION IDS
+            # --------------------------------------------------
 
-            session_records = []
+            session_ids = [session.id for session in sessions]
 
-            for session in sessions:
+            activity_counts = {}
+            latest_activities = {}
+            applications_by_session = {}
 
-                # --------------------------------------------------
-                # SESSION END TIME
-                # --------------------------------------------------
-
-                end_time = session.ended_at
-
-                # Active session:
-                # calculate duration until now.
-                if end_time is None:
-                    end_time = datetime.utcnow()
+            if session_ids:
 
                 # --------------------------------------------------
-                # SESSION DURATION
+                # QUERY 1: ACTIVITY COUNT PER SESSION
                 # --------------------------------------------------
 
-                duration_seconds = max(
-                    0,
-                    int(
-                        (
-                            end_time
-                            - session.started_at
-                        ).total_seconds()
+                count_rows = (
+                    db.query(
+                        Activity.session_id,
+                        func.count(Activity.id).label("record_count")
                     )
-                )
-
-                duration_minutes = round(
-                    duration_seconds / 60,
-                    2
-                )
-
-                # --------------------------------------------------
-                # FORMATTED DURATION
-                # --------------------------------------------------
-
-                hours = duration_seconds // 3600
-                minutes = (
-                    duration_seconds % 3600
-                ) // 60
-                seconds = duration_seconds % 60
-
-                if hours > 0:
-
-                    duration_formatted = (
-                        f"{hours}h {minutes}m"
-                    )
-
-                elif minutes > 0:
-
-                    duration_formatted = (
-                        f"{minutes}m {seconds}s"
-                    )
-
-                else:
-
-                    duration_formatted = (
-                        f"{seconds}s"
-                    )
-
-                # --------------------------------------------------
-                # GET ACTIVITY RECORDS
-                # --------------------------------------------------
-
-                activities = (
-                    db.query(Activity)
                     .filter(
                         Activity.user_id == user_id,
-                        Activity.session_id == session.id
+                        Activity.session_id.in_(session_ids)
                     )
-                    .order_by(
-                        Activity.created_at.asc(),
-                        Activity.id.asc()
+                    .group_by(Activity.session_id)
+                    .all()
+                )
+
+                activity_counts = {
+                    row.session_id: row.record_count
+                    for row in count_rows
+                }
+
+                # --------------------------------------------------
+                # QUERY 2: LATEST ACTIVITY PER SESSION
+                # --------------------------------------------------
+
+                latest_subquery = (
+                    db.query(
+                        Activity.id.label("activity_id"),
+                        func.row_number().over(
+                            partition_by=Activity.session_id,
+                            order_by=(
+                                Activity.created_at.desc(),
+                                Activity.id.desc()
+                            )
+                        ).label("row_number")
+                    )
+                    .filter(
+                        Activity.user_id == user_id,
+                        Activity.session_id.in_(session_ids)
+                    )
+                    .subquery()
+                )
+
+                latest_rows = (
+                    db.query(Activity)
+                    .join(
+                        latest_subquery,
+                        Activity.id == latest_subquery.c.activity_id
+                    )
+                    .filter(
+                        latest_subquery.c.row_number == 1
                     )
                     .all()
                 )
 
+                latest_activities = {
+                    activity.session_id: activity
+                    for activity in latest_rows
+                }
+
                 # --------------------------------------------------
-                # ACTIVITY SUMMARY
+                # QUERY 3: DISTINCT APPLICATIONS PER SESSION
                 # --------------------------------------------------
 
-                record_count = len(activities)
-
-                # Activity records are periodic snapshots.
-                # The desktop monitors maintain cumulative values
-                # during the monitoring session.
-                #
-                # Therefore, DO NOT SUM these fields across snapshots.
-                # Use the latest snapshot for cumulative metrics.
-
-                latest_activity = (
-                    activities[-1]
-                    if activities
-                    else None
+                application_rows = (
+                    db.query(
+                        Activity.session_id,
+                        Activity.active_application
+                    )
+                    .filter(
+                        Activity.user_id == user_id,
+                        Activity.session_id.in_(session_ids),
+                        Activity.active_application.isnot(None),
+                        Activity.active_application.notin_(
+                            ["Unknown", "Disabled"]
+                        )
+                    )
+                    .distinct()
+                    .all()
                 )
 
-                if latest_activity is not None:
+                for row in application_rows:
+                    applications_by_session.setdefault(
+                        row.session_id, set()
+                    ).add(row.active_application)
 
-                    total_screen_time = (
-                        latest_activity.screen_time or 0
-                    )
+            # --------------------------------------------------
+            # BUILD SESSION RECORDS
+            # --------------------------------------------------
 
-                    total_active_time = (
-                        latest_activity.active_time or 0
-                    )
+            now = datetime.utcnow()
+            session_records = []
 
-                    total_idle_time = (
-                        latest_activity.idle_time or 0
-                    )
+            for session in sessions:
 
-                    total_keyboard = (
-                        latest_activity.keyboard_count or 0
-                    )
+                end_time = session.ended_at or now
 
-                    total_mouse = (
-                        latest_activity.mouse_clicks or 0
-                    )
+                duration_seconds = max(
+                    0,
+                    int((end_time - session.started_at).total_seconds())
+                )
 
-                    total_scroll = (
-                        latest_activity.scroll_count or 0
-                    )
+                duration_minutes = round(
+                    duration_seconds / 60, 2
+                )
 
-                    total_application_switches = (
-                        latest_activity.application_switches or 0
-                    )
+                hours = duration_seconds // 3600
+                minutes = (duration_seconds % 3600) // 60
+                seconds = duration_seconds % 60
 
+                if hours > 0:
+                    duration_formatted = f"{hours}h {minutes}m"
+                elif minutes > 0:
+                    duration_formatted = f"{minutes}m {seconds}s"
                 else:
+                    duration_formatted = f"{seconds}s"
 
-                    total_screen_time = 0
-                    total_active_time = 0
-                    total_idle_time = 0
+                latest = latest_activities.get(session.id)
 
-                    total_keyboard = 0
-                    total_mouse = 0
-                    total_scroll = 0
-                    total_application_switches = 0
-
-
-                # --------------------------------------------------
-                # APPLICATIONS USED
-                # --------------------------------------------------
-
-                applications_used = set()
-
-                for activity in activities:
-
-                    if (
-                        activity.active_application
-                        and activity.active_application != "Unknown"
-                        and activity.active_application != "Disabled"
-                    ):
-                        applications_used.add(
-                            activity.active_application
+                if latest:
+                    summary = {
+                        "record_count": activity_counts.get(session.id, 0),
+                        "screen_time": round(latest.screen_time or 0, 2),
+                        "active_time": round(latest.active_time or 0, 2),
+                        "idle_time": round(latest.idle_time or 0, 2),
+                        "keyboard_count": latest.keyboard_count or 0,
+                        "mouse_clicks": latest.mouse_clicks or 0,
+                        "scroll_count": latest.scroll_count or 0,
+                        "application_switches": (
+                            latest.application_switches or 0
+                        ),
+                        "applications_used": sorted(
+                            applications_by_session.get(session.id, set())
                         )
-                # --------------------------------------------------
-                # SESSION RECORD
-                # --------------------------------------------------
+                    }
+                else:
+                    summary = {
+                        "record_count": 0,
+                        "screen_time": 0,
+                        "active_time": 0,
+                        "idle_time": 0,
+                        "keyboard_count": 0,
+                        "mouse_clicks": 0,
+                        "scroll_count": 0,
+                        "application_switches": 0,
+                        "applications_used": []
+                    }
 
                 session_records.append({
-
                     "session_id": session.id,
-
                     "user_id": session.user_id,
-
                     "mode": session.mode,
-
                     "started_at": (
                         session.started_at.isoformat()
-                        if session.started_at
-                        else None
+                        if session.started_at else None
                     ),
-
                     "ended_at": (
                         session.ended_at.isoformat()
-                        if session.ended_at
-                        else None
+                        if session.ended_at else None
                     ),
-
-                    "is_active": bool(
-                        session.is_active
-                    ),
-
+                    "is_active": bool(session.is_active),
                     "last_sync_at": (
                         session.last_sync_at.isoformat()
-                        if session.last_sync_at
-                        else None
+                        if session.last_sync_at else None
                     ),
-
-                    "duration_seconds":
-                        duration_seconds,
-
-                    "duration_minutes":
-                        duration_minutes,
-
-                    "duration_formatted":
-                        duration_formatted,
-
-                    "activity_summary": {
-
-                        "record_count":
-                            record_count,
-
-                        "screen_time":
-                            round(
-                                total_screen_time,
-                                2
-                            ),
-
-                        "active_time":
-                            round(
-                                total_active_time,
-                                2
-                            ),
-
-                        "idle_time":
-                            round(
-                                total_idle_time,
-                                2
-                            ),
-
-                        "keyboard_count":
-                            total_keyboard,
-
-                        "mouse_clicks":
-                            total_mouse,
-
-                        "scroll_count":
-                            total_scroll,
-
-                        "application_switches":
-                            total_application_switches,
-
-                        "applications_used":
-                            sorted(
-                                applications_used
-                            )
-                    }
+                    "duration_seconds": duration_seconds,
+                    "duration_minutes": duration_minutes,
+                    "duration_formatted": duration_formatted,
+                    "activity_summary": summary
                 })
 
-            # ======================================================
-            # GROUPING
-            # ======================================================
-
-            grouped_data = {}
-
-            # ------------------------------------------------------
-            # SESSION GROUPING
-            # ------------------------------------------------------
+            # --------------------------------------------------
+            # GROUP SESSION / DAY / MONTH
+            # --------------------------------------------------
 
             if group_by == "session":
-
                 grouped_data = session_records
 
-            # ------------------------------------------------------
-            # DAY GROUPING
-            # ------------------------------------------------------
-
-            elif group_by == "day":
+            else:
+                groups = {}
 
                 for record in session_records:
-
-                    started_at = record.get(
-                        "started_at"
-                    )
+                    started_at = record.get("started_at")
 
                     if not started_at:
                         continue
 
-                    day_key = started_at[:10]
+                    group_key = (
+                        started_at[:10]
+                        if group_by == "day"
+                        else started_at[:7]
+                    )
 
-                    if day_key not in grouped_data:
-
-                        grouped_data[day_key] = {
-                            "date": day_key,
+                    if group_key not in groups:
+                        groups[group_key] = {
+                            "date" if group_by == "day" else "month":
+                                group_key,
                             "session_count": 0,
                             "total_duration_seconds": 0,
                             "total_duration_minutes": 0,
                             "sessions": []
                         }
 
-                    grouped_data[
-                        day_key
-                    ]["session_count"] += 1
-
-                    grouped_data[
-                        day_key
-                    ]["total_duration_seconds"] += (
+                    group = groups[group_key]
+                    group["session_count"] += 1
+                    group["total_duration_seconds"] += (
                         record["duration_seconds"]
                     )
-
-                    grouped_data[
-                        day_key
-                    ]["total_duration_minutes"] += (
+                    group["total_duration_minutes"] += (
                         record["duration_minutes"]
                     )
+                    group["sessions"].append(record)
 
-                    grouped_data[
-                        day_key
-                    ]["sessions"].append(record)
-
-                # Convert dictionary to list
-                # and round totals.
-
-                grouped_data = list(
-                    grouped_data.values()
-                )
+                grouped_data = list(groups.values())
 
                 for group in grouped_data:
-
-                    group[
-                        "total_duration_minutes"
-                    ] = round(
-                        group[
-                            "total_duration_minutes"
-                        ],
-                        2
+                    group["total_duration_minutes"] = round(
+                        group["total_duration_minutes"], 2
                     )
 
-            # ------------------------------------------------------
-            # MONTH GROUPING
-            # ------------------------------------------------------
-
-            elif group_by == "month":
-
-                for record in session_records:
-
-                    started_at = record.get(
-                        "started_at"
-                    )
-
-                    if not started_at:
-                        continue
-
-                    month_key = started_at[:7]
-
-                    if month_key not in grouped_data:
-
-                        grouped_data[month_key] = {
-                            "month": month_key,
-                            "session_count": 0,
-                            "total_duration_seconds": 0,
-                            "total_duration_minutes": 0,
-                            "sessions": []
-                        }
-
-                    grouped_data[
-                        month_key
-                    ]["session_count"] += 1
-
-                    grouped_data[
-                        month_key
-                    ]["total_duration_seconds"] += (
-                        record["duration_seconds"]
-                    )
-
-                    grouped_data[
-                        month_key
-                    ]["total_duration_minutes"] += (
-                        record["duration_minutes"]
-                    )
-
-                    grouped_data[
-                        month_key
-                    ]["sessions"].append(record)
-
-                grouped_data = list(
-                    grouped_data.values()
-                )
-
-                for group in grouped_data:
-
-                    group[
-                        "total_duration_minutes"
-                    ] = round(
-                        group[
-                            "total_duration_minutes"
-                        ],
-                        2
-                    )
-
-            # ======================================================
+            # --------------------------------------------------
             # OVERALL SUMMARY
-            # ======================================================
+            # --------------------------------------------------
 
-            total_sessions = len(
-                session_records
-            )
+            total_sessions = len(session_records)
 
             total_duration_seconds = sum(
                 record["duration_seconds"]
                 for record in session_records
             )
 
-            total_duration_minutes = round(
-                total_duration_seconds / 60,
-                2
+            total_activity_records = sum(
+                record["activity_summary"]["record_count"]
+                for record in session_records
             )
 
             ai_sessions = sum(
-                1
-                for record in session_records
+                1 for record in session_records
                 if record["mode"] == "AI_MONITORING"
             )
 
             data_collection_sessions = sum(
-                1
-                for record in session_records
+                1 for record in session_records
                 if record["mode"] == "DATA_COLLECTION"
             )
 
-            total_activity_records = sum(
-                record[
-                    "activity_summary"
-                ]["record_count"]
-                for record in session_records
-            )
-
-            # ======================================================
+            # --------------------------------------------------
             # SUCCESS RESPONSE
-            # ======================================================
+            # --------------------------------------------------
 
             return {
-
                 "success": True,
-
                 "filters": {
-
                     "user_id": user_id,
-
                     "mode": mode,
-
                     "group_by": group_by,
-
                     "start_date": start_date,
-
                     "end_date": end_date
                 },
-
                 "summary": {
-
-                    "total_sessions":
-                        total_sessions,
-
-                    "ai_monitoring_sessions":
-                        ai_sessions,
-
-                    "data_collection_sessions":
-                        data_collection_sessions,
-
-                    "total_activity_records":
-                        total_activity_records,
-
-                    "total_duration_seconds":
-                        total_duration_seconds,
-
-                    "total_duration_minutes":
-                        total_duration_minutes
+                    "total_sessions": total_sessions,
+                    "ai_monitoring_sessions": ai_sessions,
+                    "data_collection_sessions": data_collection_sessions,
+                    "total_activity_records": total_activity_records,
+                    "total_duration_seconds": total_duration_seconds,
+                    "total_duration_minutes": round(
+                        total_duration_seconds / 60, 2
+                    )
                 },
-
                 "data": grouped_data
             }
 
         except Exception as e:
-
-            print(
-                "MonitoringService history error:",
-                str(e)
-            )
-
+            print("MonitoringService history error:", str(e))
             return {
                 "success": False,
                 "message": str(e)
             }
 
         finally:
-
             db.close()
-
-
-
-
 
     # ==========================================================
     # GET SINGLE MONITORING SESSION DETAILS
