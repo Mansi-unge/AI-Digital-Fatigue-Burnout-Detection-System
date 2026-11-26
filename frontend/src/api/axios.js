@@ -1,4 +1,3 @@
-
 import axios from "axios";
 
 const api = axios.create({
@@ -9,5 +8,4 @@ const api = axios.create({
 });
 
 console.log("VitaSense API URL:", api.defaults.baseURL);
-
 export default api;
